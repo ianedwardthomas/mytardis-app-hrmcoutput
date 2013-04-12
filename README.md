@@ -11,16 +11,17 @@ Currently requires Contextual View branch of the MyTardis system:
 ``git clone https://github.com/grischa/mytardis/tree/synch-views mytardis``
 
 Then checkout the MyTardis app:
-``git clone https://github.com/fnargle/hrmc-contextviews``
+``git clone https://github.com/ianedwardthomas/mytardis-app-hrmcoutput hrmc_views``
 to be installed under the ``tardis/apps`` directory
 
 See this repository for more information.
 
 For centos 6 install the matplotlib library::
 
-  sudo yum install python-matplotlib
+    sudo yum install python-matplotlib
 
 In ``tardis/settings.py`` add following::
+
     # Post Save Filters
     POST_SAVE_FILTERS = [
         ("tardis.tardis_portal.filters.hrmc.make_filter",
