@@ -7,7 +7,7 @@ the Bioscience Data Platform MyTardis installation.
 Installation
 ------------
 
-Currently requires Contextual View branch of the MyTardis system:
+Currently requires contextual view branch of the MyTardis system:
 ``git clone https://github.com/grischa/mytardis/tree/synch-views mytardis``
 
 Then checkout the MyTardis app:
@@ -15,6 +15,10 @@ Then checkout the MyTardis app:
 to be installed under the ``tardis/apps`` directory
 
 See this repository for more information.
+
+install ``hrmc.py`` filter  into mytardis::
+
+    cp hrmc.py ../../tardis/tardis_portal/filters
 
 For centos 6 install the matplotlib library::
 
