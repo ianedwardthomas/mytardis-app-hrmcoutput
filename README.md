@@ -18,7 +18,7 @@ See this repository for more information.
 
 install ``hrmc.py`` filter  into mytardis::
 
-    cp hrmc.py ../../tardis/tardis_portal/filters
+    mv hrmc_views/hrmc.py ../../tardis/tardis_portal/filters
 
 For centos 6 install the matplotlib library::
 
