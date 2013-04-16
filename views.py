@@ -22,6 +22,7 @@
 import logging
 import base64
 import os
+import re
 
 from django.core.paginator import Paginator, InvalidPage, EmptyPage
 from django.http import HttpResponse
@@ -174,6 +175,12 @@ def get_image_to_show(dataset):
             for d in f.read():
                 grfinal_buff.append(d)
 
+        mat = re.compile("grfinal(\d+)\.dat").match(grfinal_file.filename)
+        if mat:
+            grlabel = "Calculation %s" % mat.group(1)
+        else:
+            grlabel = grfinal_file.filename
+
         xs = []
         ys = []
         for l in ''.join(grfinal_buff).split("\n"):
@@ -182,7 +189,7 @@ def get_image_to_show(dataset):
                 x, y = l.split()
                 xs.append(float(x))
                 ys.append(float(y))
-        matplotlib.pyplot.scatter(xs, ys, c='b', label=str(grfinal_file.filename))
+        matplotlib.pyplot.plot(xs, ys, color="blue", markeredgecolor = 'blue', marker="D", label=str(grlabel))
 
         xs = []
         ys = []
@@ -192,17 +199,18 @@ def get_image_to_show(dataset):
                 x, y = l.split()
                 xs.append(float(x))
                 ys.append(float(y))
-        matplotlib.pyplot.scatter(xs, ys, c="r", label=str(grexp_file.filename))
+        matplotlib.pyplot.plot(xs, ys, color="red", markeredgecolor = 'red', marker="o", label="Experiment")
 
         import tempfile
         pfile = tempfile.mktemp()
         logger.debug("pfile=%s" % pfile)
 
-        pyplot.xlabel("x")
-        pyplot.ylabel("y")
+        pyplot.xlabel("r (Angstroms)")
+        pyplot.ylabel("g(r)")
         pyplot.grid(True)
         #legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
         legend()
+        pyplot.xlim(xmin=0)
 
         fig = matplotlib.pyplot.gcf()
         fig.set_size_inches(15.5, 13.5)
