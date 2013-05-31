@@ -57,7 +57,7 @@ HRMC_DATASET_SCHEMA = "http://rmit.edu.au/schemas/hrmcdataset"
 @authz.dataset_access_required
 def view_full_dataset(request, dataset_id):
     """Displays a HRMC Dataset as a single scatter plot of x,y values
-    from grfinalXX.dat and gerr.dat files
+    from psdXX.dat and gerr.dat files
 
     Requires BDPMytardis with single
 
@@ -95,6 +95,8 @@ def view_full_dataset(request, dataset_id):
     if image_to_show:
         display_images.append(image_to_show)
 
+    upload_method = getattr(settings, "UPLOAD_METHOD", "uploadify")
+
     c = Context({
         'dataset': dataset,
         'datafiles': get_datafiles_page(),
@@ -104,11 +106,17 @@ def view_full_dataset(request, dataset_id):
             authz.has_dataset_download_access(request, dataset_id),
         'has_write_permissions':
             authz.has_dataset_write(request, dataset_id),
-        'from_experiment': \
+        'from_experiment':
             get_experiment_referer(request, dataset_id),
-        'other_experiments': \
+        'other_experiments':
             authz.get_accessible_experiments_for_dataset(request, dataset_id),
+        'upload_method': upload_method,
+        'default_organization':
+            getattr(settings, 'DEFAULT_ARCHIVE_ORGANIZATION', 'classic'),
+        'default_format':
+            getattr(settings, 'DEFAULT_ARCHIVE_FORMATS', ['zip', 'tar'])[0],
         'display_images': display_images,
+
     })
     return HttpResponse(render_response_index(
         request, 'hrmc_views/view_full_dataset.html', c))
@@ -153,53 +161,50 @@ def get_image_to_show(dataset):
 
     logger.debug("building plots")
     display_image = None
-    grfinal_file = None
-    grexp_file = None
+    psd_file = None
+    psdexp_file = None
     for df in Dataset_File.objects.filter(dataset=dataset):
         logger.debug("testing %s" % df.filename)
-        if "grexp.dat" in df.filename:
-            grexp_file = df
-        if df.filename.startswith("grfinal"):
-            grfinal_file = df
-    if grexp_file and grfinal_file and is_matplotlib_imported:
+        if "PSD_exp.dat" in df.filename:
+            psdexp_file = df
+        if "psd.dat" in df.filename:
+            psd_file = df
+    if psdexp_file and psd_file and is_matplotlib_imported:
         logger.debug("found both")
-        fp = grexp_file.get_absolute_filepath()
-        grexp_buff = []
+        fp = psdexp_file.get_absolute_filepath()
+        psdexp_buff = []
         with open(fp) as f:
             for d in f.read():
-                grexp_buff.append(d)
+                psdexp_buff.append(d)
 
-        fp = grfinal_file.get_absolute_filepath()
-        grfinal_buff = []
+        fp = psd_file.get_absolute_filepath()
+        psd_buff = []
         with open(fp) as f:
             for d in f.read():
-                grfinal_buff.append(d)
+                psd_buff.append(d)
 
-        mat = re.compile("grfinal(\d+)\.dat").match(grfinal_file.filename)
-        if mat:
-            grlabel = "Calculation %s" % mat.group(1)
-        else:
-            grlabel = grfinal_file.filename
+
+        grlabel = psd_file.filename
 
         xs = []
         ys = []
-        for l in ''.join(grfinal_buff).split("\n"):
+        for l in ''.join(psd_buff).split("\n"):
             #logger.debug("l=%s" % l)
             if l:
                 x, y = l.split()
                 xs.append(float(x))
                 ys.append(float(y))
-        matplotlib.pyplot.plot(xs, ys, color="blue", markeredgecolor = 'blue', marker="D", label=str(grlabel))
+        matplotlib.pyplot.plot(xs, ys, color="blue", markeredgecolor= 'blue', marker="D", label=str(grlabel))
 
         xs = []
         ys = []
-        for l in ''.join(grexp_buff).split("\n"):
+        for l in ''.join(psdexp_buff).split("\n"):
             #logger.debug("l=%s" % l)
             if l:
                 x, y = l.split()
                 xs.append(float(x))
                 ys.append(float(y))
-        matplotlib.pyplot.plot(xs, ys, color="red", markeredgecolor = 'red', marker="o", label="Experiment")
+        matplotlib.pyplot.plot(xs, ys, color="red", markeredgecolor= 'red', marker="o", label="Experiment")
 
         import tempfile
         pfile = tempfile.mktemp()
