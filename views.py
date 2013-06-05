@@ -22,6 +22,7 @@
 import logging
 import base64
 import os
+import tempfile
 import re
 
 from django.core.paginator import Paginator, InvalidPage, EmptyPage
@@ -29,14 +30,21 @@ from django.http import HttpResponse
 from django.template import Context
 from django.conf import settings
 from django.core.exceptions import MultipleObjectsReturned
+from django.core.exceptions import PermissionDenied
+from tardis.tardis_portal.shortcuts import return_response_error, return_response_not_found
 
+from tardis.urls import getTardisApps
 from tardis.tardis_portal.auth import decorators as authz
-from tardis.tardis_portal.models import Dataset
+from tardis.tardis_portal.models import Dataset, Experiment
 from tardis.tardis_portal.shortcuts import get_experiment_referer
 from tardis.tardis_portal.shortcuts import render_response_index
-from tardis.tardis_portal.models import Schema, DatasetParameterSet
-from tardis.tardis_portal.models import ParameterName, DatasetParameter
+from tardis.tardis_portal.models import Schema, DatasetParameterSet, ExperimentParameterSet
+from tardis.tardis_portal.models import ParameterName, DatasetParameter, ExperimentParameter
 from tardis.tardis_portal.models import Dataset_File
+from tardis.tardis_portal.views import SearchQueryString
+from tardis.tardis_portal.auth import decorators as authz
+
+from tardis.tardis_portal.views import _add_protocols_and_organizations
 
 # import and configure matplotlib library
 try:
@@ -53,6 +61,82 @@ logger = logging.getLogger(__name__)
 
 # TODO: contextual view should pass info about DATASET view to its view
 HRMC_DATASET_SCHEMA = "http://rmit.edu.au/schemas/hrmcdataset"
+HRMC_OUTPUT_DATASET_SCHEMA = "http://rmit.edu.au/schemas/hrmcdataset/output"
+HRMC_EXPERIMENT_SCHEMA = "http://rmit.edu.au/schemas/hrmcexp"
+
+
+
+@authz.experiment_access_required
+def view_experiment(request, experiment_id,
+                    template_name='hrmc_views/view_experiment.html'):
+
+    """View an existing experiment.
+
+    :param request: a HTTP Request instance
+    :type request: :class:`django.http.HttpRequest`
+    :param experiment_id: the ID of the experiment to be edited
+    :type experiment_id: string
+    :rtype: :class:`django.http.HttpResponse`
+
+    """
+    c = Context({})
+
+    try:
+        experiment = Experiment.safe.get(request, experiment_id)
+    except PermissionDenied:
+        return return_response_error(request)
+    except Experiment.DoesNotExist:
+        return return_response_not_found(request)
+
+    c['experiment'] = experiment
+    c['has_write_permissions'] = \
+        authz.has_write_permissions(request, experiment_id)
+    c['has_download_permissions'] = \
+        authz.has_experiment_download_access(request, experiment_id)
+    if request.user.is_authenticated():
+        c['is_owner'] = authz.has_experiment_ownership(request, experiment_id)
+    c['subtitle'] = experiment.title
+    c['nav'] = [{'name': 'Data', 'link': '/experiment/view/'},
+                {'name': experiment.title,
+                 'link': experiment.get_absolute_url()}]
+
+    if 'status' in request.POST:
+        c['status'] = request.POST['status']
+    if 'error' in request.POST:
+        c['error'] = request.POST['error']
+    if 'query' in request.GET:
+        c['search_query'] = SearchQueryString(request.GET['query'])
+    if 'search' in request.GET:
+        c['search'] = request.GET['search']
+    if 'load' in request.GET:
+        c['load'] = request.GET['load']
+
+    display_images = []
+    image_to_show = get_exp_images_to_show(experiment)
+    if image_to_show:
+        display_images.append(image_to_show)
+
+    c['display_images'] = display_images
+
+    _add_protocols_and_organizations(request, experiment, c)
+
+    import sys
+    appnames = []
+    appurls = []
+    for app in getTardisApps():
+        try:
+            appnames.append(sys.modules['%s.%s.settings'
+                                        % (settings.TARDIS_APP_ROOT, app)].NAME)
+            appurls.append('%s.%s.views.index' % (settings.TARDIS_APP_ROOT,
+                                                  app))
+        except:
+            logger.debug("No tab for %s" % app)
+            pass
+
+    c['apps'] = zip(appurls, appnames)
+
+    return HttpResponse(render_response_index(request, template_name, c))
+
 
 @authz.dataset_access_required
 def view_full_dataset(request, dataset_id):
@@ -122,6 +206,142 @@ def view_full_dataset(request, dataset_id):
         request, 'hrmc_views/view_full_dataset.html', c))
 
 
+def get_exp_images_to_show(experiment):
+    # check we are setup correctly.
+    try:
+        hrmc_dataset_schema = Schema.objects.get(namespace__exact=HRMC_DATASET_SCHEMA,
+            type=Schema.DATASET)
+    except Schema.DoesNotExist:
+        logger.debug("no hrmc dataset schema")
+        return None
+    except MultipleObjectsReturned:
+        logger.error("multiple hrmc dataset schemas returned")
+        return None
+
+    try:
+        hrmc_experiment_schema = Schema.objects.get(namespace__exact=HRMC_EXPERIMENT_SCHEMA,
+            type=Schema.EXPERIMENT)
+    except Schema.DoesNotExist:
+        logger.debug("no hrmc experiment schema")
+        return None
+    except MultipleObjectsReturned:
+        logger.error("multiple hrmc experiment schemas returned")
+        return None
+
+    try:
+        hrmc_output_dataset_schema = Schema.objects.get(namespace__exact=HRMC_OUTPUT_DATASET_SCHEMA,
+            type=Schema.DATASET)
+    except Schema.DoesNotExist:
+        logger.debug("no hrmc dataset schema")
+        return None
+    except MultipleObjectsReturned:
+        logger.error("multiple hrmc dataset schemas returned")
+        return None
+
+    try:
+        eps = ExperimentParameterSet.objects.get(schema=hrmc_experiment_schema, experiment=experiment)
+    except ExperimentParameterSet.DoesNotExist:
+        logger.debug("exp parameterset not found")
+        return None
+    except MultipleObjectsReturned:
+        logger.error("multiple experiment paramter sets returned")
+        # NB: If admin tool added additional param set,
+        # we know that all data will be the same for this schema
+        # so can safely delete any extras we find.
+        pslist = [x.id for x in ExperimentParameterSet.objects.filter(schema=sch,
+            experiment=experiment)]
+        logger.debug("pslist=%s" % pslist)
+        ExperimentParameterSet.objects.filter(id__in=pslist[1:]).delete()
+        eps = ExperimentParameterSet.objects.get(id=pslist[0])
+
+    CRITERION_FILE = "criterion.txt"
+    DS_NAME_SEP = "_"
+    ys = []
+    xs = []
+    for df in experiment.get_datafiles().filter(filename=CRITERION_FILE):
+        logger.debug("df=%s" % df)
+        try:
+            ps = DatasetParameterSet.objects.get(schema=hrmc_output_dataset_schema, dataset=df.dataset)
+        except DatasetParameterSet.DoesNotExist:
+            logger.debug("criterion file found in non hrmc dataset")
+            continue
+        except MultipleObjectsReturned:
+            logger.error("multiple dataset paramter sets returned")
+        ds_desc = df.dataset.description
+        logger.debug("ds_desc=%s" % ds_desc)
+        ds_desc = ds_desc.split(DS_NAME_SEP)
+        if len(ds_desc) == 3:
+            try:
+                x = int(ds_desc[0])
+            except IndexError, e:
+                logger.error("problem parsing %s:%s" % (ds_desc, e))
+                continue
+            except ValueError, e:
+                logger.error("problem parsing %s:%s" % (ds_desc, e))
+                continue
+        else:
+            logger.error("found criterion file in input data")
+            continue
+        logger.debug("x=%s" % x)
+        fp = df.get_file()
+        try:
+            criterion = float(fp.read())
+        except IOError, e:
+            logger.error(e)
+            continue
+        except Exception, e:
+            logger.error(e)
+            continue
+        logger.debug("criterion=%s" % criterion)
+        ys.append(criterion)
+        xs.append(x)
+
+    if len(ys) and len(xs):
+        fig = matplotlib.pyplot.gcf()
+        fig.set_size_inches(15.5, 13.5)
+        ax = fig.add_subplot(111, frame_on=False)
+
+        # Create a subplot.
+        #ax.scatter(xs, ys, color="red", markeredgecolor='red', marker="x", label="criterion")
+        ax.scatter(xs, ys, color="blue",  marker="x", label="criterion")
+
+        pfile = tempfile.mktemp()
+        logger.debug("pfile=%s" % pfile)
+
+        pyplot.xlabel("iteration")
+        pyplot.ylabel("criterion")
+        pyplot.grid(True)
+        #legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+        legend()
+        pyplot.xlim(xmin=0)
+
+        matplotlib.pyplot.savefig("%s.png" % pfile, dpi=100)
+
+        with open("%s.png" % pfile) as pf:
+            read = pf.read()
+            encoded = base64.b64encode(read)
+            matplotlib.pyplot.close()
+        try:
+            pn = ParameterName.objects.get(schema=hrmc_experiment_schema, name="plot")
+        except ParameterName.DoesNotExist:
+            logger.error("schema is missing plot parameter")
+            return None
+        except MultipleObjectsReturned:
+            logger.error("schema is multiple plot parameters")
+            return None
+
+        logger.debug("ready to save")
+
+        ep = ExperimentParameter(parameterset=eps,
+            name=pn)
+        ep.string_value = encoded
+        ep.save()
+
+        return ep
+    else:
+        return None
+
+
 def get_image_to_show(dataset):
 
     try:
@@ -162,20 +382,20 @@ def get_image_to_show(dataset):
     logger.debug("building plots")
     display_image = None
     psd_file = None
-    psdexp_file = None
+    data_grfinal_file = None
     for df in Dataset_File.objects.filter(dataset=dataset):
         logger.debug("testing %s" % df.filename)
-        if "PSD_exp.dat" in df.filename:
-            psdexp_file = df
+        if "data_grfinal.dat" in df.filename:
+            data_grfinal_file = df
         if "psd.dat" in df.filename:
             psd_file = df
-    if psdexp_file and psd_file and is_matplotlib_imported:
+    if data_grfinal_file and psd_file and is_matplotlib_imported:
         logger.debug("found both")
-        fp = psdexp_file.get_absolute_filepath()
-        psdexp_buff = []
+        fp = data_grfinal_file.get_absolute_filepath()
+        data_grfinal_buff = []
         with open(fp) as f:
             for d in f.read():
-                psdexp_buff.append(d)
+                data_grfinal_buff.append(d)
 
         fp = psd_file.get_absolute_filepath()
         psd_buff = []
@@ -183,8 +403,7 @@ def get_image_to_show(dataset):
             for d in f.read():
                 psd_buff.append(d)
 
-
-        grlabel = psd_file.filename
+        grlabel = "psd.dat"
 
         xs = []
         ys = []
@@ -198,13 +417,13 @@ def get_image_to_show(dataset):
 
         xs = []
         ys = []
-        for l in ''.join(psdexp_buff).split("\n"):
+        for l in ''.join(data_grfinal_buff).split("\n"):
             #logger.debug("l=%s" % l)
             if l:
                 x, y = l.split()
                 xs.append(float(x))
                 ys.append(float(y))
-        matplotlib.pyplot.plot(xs, ys, color="red", markeredgecolor= 'red', marker="o", label="Experiment")
+        matplotlib.pyplot.plot(xs, ys, color="red", markeredgecolor= 'red', marker="o", label="data_grfinal")
 
         import tempfile
         pfile = tempfile.mktemp()
