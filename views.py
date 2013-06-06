@@ -63,6 +63,12 @@ logger = logging.getLogger(__name__)
 HRMC_DATASET_SCHEMA = "http://rmit.edu.au/schemas/hrmcdataset"
 HRMC_OUTPUT_DATASET_SCHEMA = "http://rmit.edu.au/schemas/hrmcdataset/output"
 HRMC_EXPERIMENT_SCHEMA = "http://rmit.edu.au/schemas/hrmcexp"
+DATA_ERRORS_FILE = "data_errors.dat"
+DS_NAME_SEP = "_"
+STEP_COLUMN_NUM = 0
+ERRGR_COLUMN_NUM = 28
+STEP_LABEL = "Step"
+ERRGR_LABEL = "ERRGr*wf"
 
 
 
@@ -112,7 +118,10 @@ def view_experiment(request, experiment_id,
         c['load'] = request.GET['load']
 
     display_images = []
-    image_to_show = get_exp_images_to_show(experiment)
+    image_to_show = get_exp_images_to_show1(experiment)
+    if image_to_show:
+        display_images.append(image_to_show)
+    image_to_show = get_exp_images_to_show2(experiment)
     if image_to_show:
         display_images.append(image_to_show)
 
@@ -174,8 +183,41 @@ def view_full_dataset(request, dataset_id):
         except (EmptyPage, InvalidPage):
             return paginator.page(paginator.num_pages)
 
+    try:
+        sch = Schema.objects.get(namespace__exact=HRMC_DATASET_SCHEMA)
+    except Schema.DoesNotExist:
+        logger.debug("no hrmc schema")
+        return None
+    # TODO: check schema contains correct paramters
+    except MultipleObjectsReturned:
+        logger.error("multiple hrmc schemas returned")
+        return None
+    try:
+        dps = DatasetParameterSet.objects.get(schema=sch, dataset=dataset)
+    except DatasetParameterSet.DoesNotExist:
+        logger.debug("datset parameterset not found")
+        return None
+    except MultipleObjectsReturned:
+        logger.error("multiple dataset paramter sets returned")
+        return None
+
     display_images = []
-    image_to_show = get_image_to_show(dataset)
+
+    # plot psd.dat and PSD_exp.dat versus r
+    image_to_show = get_dataset_image_to_show(dataset, sch, dps, hrmc_plot_name="plot1",
+        filename1="psd.dat", filename2="PSD_exp.dat",
+        file_label1= "psd", file_label2="PSD_exp",
+        x_label="r (Angstroms)",
+        y_label="g(r)")
+    if image_to_show:
+        display_images.append(image_to_show)
+
+    # plot data_grfinal.dat and input_gr.dat versus r
+    image_to_show = get_dataset_image_to_show(dataset, sch, dps, hrmc_plot_name="plot2",
+        filename1="data_grfinal.dat", filename2="input_gr.dat",
+        file_label1="data_grfinal", file_label2= "input_gr",
+        x_label="r (Angstroms)",
+        y_label="g(r)")
     if image_to_show:
         display_images.append(image_to_show)
 
@@ -206,7 +248,10 @@ def view_full_dataset(request, dataset_id):
         request, 'hrmc_views/view_full_dataset.html', c))
 
 
-def get_exp_images_to_show(experiment):
+def get_exp_images_to_show1(experiment):
+    """
+    Graph iteration number versus PSD criterion value ( a scatter plot with M points per iteration number)
+    """
     # check we are setup correctly.
     try:
         hrmc_dataset_schema = Schema.objects.get(namespace__exact=HRMC_DATASET_SCHEMA,
@@ -283,7 +328,13 @@ def get_exp_images_to_show(experiment):
             logger.error("found criterion file in input data")
             continue
         logger.debug("x=%s" % x)
-        fp = df.get_file()
+        try:
+            fp = df.get_file()
+        except ValueError:
+            logger.warn("file has not been verified")
+            continue
+            # can fail if datafile has been upload but has not been verified
+
         try:
             criterion = float(fp.read())
         except IOError, e:
@@ -322,13 +373,15 @@ def get_exp_images_to_show(experiment):
             encoded = base64.b64encode(read)
             matplotlib.pyplot.close()
         try:
-            pn = ParameterName.objects.get(schema=hrmc_experiment_schema, name="plot")
+            pn = ParameterName.objects.get(schema=hrmc_experiment_schema, name="plot1")
         except ParameterName.DoesNotExist:
             logger.error("schema is missing plot parameter")
             return None
         except MultipleObjectsReturned:
             logger.error("schema is multiple plot parameters")
             return None
+
+        logger.debug("pn=%s" % pn)
 
         logger.debug("ready to save")
 
@@ -341,96 +394,222 @@ def get_exp_images_to_show(experiment):
     else:
         return None
 
-
-def get_image_to_show(dataset):
-
+def get_exp_images_to_show2(experiment):
+    """
+    For the final iteration of a run, graph step number versus ERRgr*wf  from the data_errors.dat for each calculation (scatter of N values per step number)
+    """
     try:
-        sch = Schema.objects.get(namespace__exact=HRMC_DATASET_SCHEMA)
+        hrmc_dataset_schema = Schema.objects.get(namespace__exact=HRMC_DATASET_SCHEMA,
+            type=Schema.DATASET)
     except Schema.DoesNotExist:
-        logger.debug("no hrmc schema")
+        logger.debug("no hrmc dataset schema")
         return None
     except MultipleObjectsReturned:
-        logger.error("multiple hrmc schemas returned")
+        logger.error("multiple hrmc dataset schemas returned")
         return None
-    #FIXME: possible that more than once dataset can appear, so pick only one.
+
     try:
-        ps = DatasetParameterSet.objects.get(schema=sch, dataset=dataset)
-    except DatasetParameterSet.DoesNotExist:
-        logger.debug("datset parameterset not found")
+        hrmc_experiment_schema = Schema.objects.get(namespace__exact=HRMC_EXPERIMENT_SCHEMA,
+            type=Schema.EXPERIMENT)
+    except Schema.DoesNotExist:
+        logger.debug("no hrmc experiment schema")
         return None
     except MultipleObjectsReturned:
-        logger.error("multiple dataset paramter sets returned")
+        logger.error("multiple hrmc experiment schemas returned")
+        return None
+
+    try:
+        hrmc_output_dataset_schema = Schema.objects.get(namespace__exact=HRMC_OUTPUT_DATASET_SCHEMA,
+            type=Schema.DATASET)
+    except Schema.DoesNotExist:
+        logger.debug("no hrmc dataset schema")
+        return None
+    except MultipleObjectsReturned:
+        logger.error("multiple hrmc dataset schemas returned")
+        return None
+
+    try:
+        eps = ExperimentParameterSet.objects.get(schema=hrmc_experiment_schema, experiment=experiment)
+    except ExperimentParameterSet.DoesNotExist:
+        logger.debug("exp parameterset not found")
+        return None
+    except MultipleObjectsReturned:
+        logger.error("multiple experiment paramter sets returned")
         # NB: If admin tool added additional param set,
         # we know that all data will be the same for this schema
         # so can safely delete any extras we find.
-        pslist = [x.id for x in DatasetParameterSet.objects.filter(schema=sch,
-            dataset=dataset)]
+        pslist = [x.id for x in ExperimentParameterSet.objects.filter(schema=sch,
+            experiment=experiment)]
         logger.debug("pslist=%s" % pslist)
-        DatasetParameterSet.objects.filter(id__in=pslist[1:]).delete()
-        ps = DatasetParameterSet.objects.get(id=pslist[0])
+        ExperimentParameterSet.objects.filter(id__in=pslist[1:]).delete()
+        eps = ExperimentParameterSet.objects.get(id=pslist[0])
+
+    ys = []
+    xs = []
+
+    fig = matplotlib.pyplot.gcf()
+    fig.set_size_inches(15.5, 13.5)
+    ax = fig.add_subplot(111, frame_on=False)
+    re_dbl_fort = re.compile(r'(\d*\.\d+)[dD]([-+]?\d+)')
+
+    for df in experiment.get_datafiles() \
+        .filter(filename=DATA_ERRORS_FILE) \
+        .filter(dataset__description__startswith="final"):
+        logger.debug("df=%s" % df)
+        try:
+            ps = DatasetParameterSet.objects.get(schema=hrmc_output_dataset_schema,
+                dataset=df.dataset)
+        except DatasetParameterSet.DoesNotExist:
+            logger.debug("criterion file found in non hrmc dataset")
+            continue
+        except MultipleObjectsReturned:
+            logger.error("multiple dataset paramter sets returned")
+        ds_desc = df.dataset.description
+        logger.debug("ds_desc=%s" % ds_desc)
+        ds_desc = ds_desc.split(DS_NAME_SEP)
+        try:
+            fp = df.get_file()
+        except ValueError:
+            # if file has not been verified
+            continue
+
+        xs = []
+        ys = []
+
+        for i, line in enumerate(fp):
+            if i == 0:
+                continue
+            columns = line.split()
+            try:
+                hrmc_step = int(columns[STEP_COLUMN_NUM])
+            except ValueError:
+                logger.warn("could not parse hrmc_step value on line %s" % i)
+                continue
+            # handle  format double precision float format
+            val = columns[ERRGR_COLUMN_NUM]
+            val = re_dbl_fort.sub(r'\1E\2', val)
+            logger.debug("val=%s" % val)
+            try:
+                hrmc_errgr = float(val)
+            except ValueError:
+                logger.warn("could not parse hrmc_errgr value on line %s" % i)
+                continue
+            xs.append(hrmc_step)
+            ys.append(hrmc_errgr)
+
+        if len(ys) and len(xs):
+            ax.scatter(xs, ys, color="blue",  marker="x", label=str(df.dataset.description))
+
+        logger.debug("xs=%s" % xs)
+        logger.debug("ys=%s" % ys)
+
+    pfile = tempfile.mktemp()
+    logger.debug("pfile=%s" % pfile)
+
+    pyplot.xlabel(STEP_LABEL)
+    pyplot.ylabel(ERRGR_LABEL)
+    logger.debug("label")
+    pyplot.grid(True)
+    #legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+    legend()
+    #pyplot.xlim(xmin=0)
+
+    logger.debug("set legend")
+    try:
+        matplotlib.pyplot.savefig("%s.png" % pfile, dpi=100)
+    except Exception, e:
+        logger.error(e)
+        raise
+
+    logger.debug("saved")
+    with open("%s.png" % pfile) as pf:
+        read = pf.read()
+        encoded = base64.b64encode(read)
+        matplotlib.pyplot.close()
+    try:
+        pn = ParameterName.objects.get(schema=hrmc_experiment_schema, name="plot2")
+    except ParameterName.DoesNotExist:
+        logger.error("schema is missing plot parameter")
+        return None
+    except MultipleObjectsReturned:
+        logger.error("schema is multiple plot parameters")
+        return None
+
+    logger.debug("ready to save")
+    logger.debug("pn=%s" % pn)
+
+    ep = ExperimentParameter(parameterset=eps,
+        name=pn)
+    ep.string_value = encoded
+    ep.save()
+
+    return ep
 
 
+
+def get_dataset_image_to_show(dataset, sch, ps, hrmc_plot_name,
+    filename1, filename2, file_label1, file_label2, x_label, y_label):
     logger.debug("found ps=%s" % ps)
     for param in DatasetParameter.objects.filter(parameterset=ps):
         logger.debug("param=%s" % param)
         logger.debug("param.name=%s" % param.name)
 
-        if "plot" in param.name.name:
+        if hrmc_plot_name in param.name.name:
             logger.debug("found existing image")
             return param
 
     logger.debug("building plots")
     display_image = None
-    psd_file = None
-    data_grfinal_file = None
+    file2 = None
+    file1 = None
     for df in Dataset_File.objects.filter(dataset=dataset):
         logger.debug("testing %s" % df.filename)
-        if "data_grfinal.dat" in df.filename:
-            data_grfinal_file = df
-        if "psd.dat" in df.filename:
-            psd_file = df
-    if data_grfinal_file and psd_file and is_matplotlib_imported:
+        if filename1 in df.filename:
+            file1 = df
+        if filename2 in df.filename:
+            file2 = df
+    if file1 and file2 and is_matplotlib_imported:
         logger.debug("found both")
-        fp = data_grfinal_file.get_absolute_filepath()
-        data_grfinal_buff = []
+        fp = file1.get_absolute_filepath()
+        file1_buff = []
         with open(fp) as f:
             for d in f.read():
-                data_grfinal_buff.append(d)
+                file1_buff.append(d)
 
-        fp = psd_file.get_absolute_filepath()
-        psd_buff = []
+        fp = file2.get_absolute_filepath()
+        file2_buff = []
         with open(fp) as f:
             for d in f.read():
-                psd_buff.append(d)
-
-        grlabel = "psd.dat"
+                file2_buff.append(d)
 
         xs = []
         ys = []
-        for l in ''.join(psd_buff).split("\n"):
+        for l in ''.join(file2_buff).split("\n"):
             #logger.debug("l=%s" % l)
             if l:
                 x, y = l.split()
                 xs.append(float(x))
                 ys.append(float(y))
-        matplotlib.pyplot.plot(xs, ys, color="blue", markeredgecolor= 'blue', marker="D", label=str(grlabel))
+        matplotlib.pyplot.plot(xs, ys, color="blue",
+            markeredgecolor='blue', marker="D", label=file_label1)
 
         xs = []
         ys = []
-        for l in ''.join(data_grfinal_buff).split("\n"):
+        for l in ''.join(file1_buff).split("\n"):
             #logger.debug("l=%s" % l)
             if l:
                 x, y = l.split()
                 xs.append(float(x))
                 ys.append(float(y))
-        matplotlib.pyplot.plot(xs, ys, color="red", markeredgecolor= 'red', marker="o", label="data_grfinal")
+        matplotlib.pyplot.plot(xs, ys, color="red",
+            markeredgecolor='red', marker="o", label=file_label2)
 
         import tempfile
         pfile = tempfile.mktemp()
         logger.debug("pfile=%s" % pfile)
 
-        pyplot.xlabel("r (Angstroms)")
-        pyplot.ylabel("g(r)")
+        pyplot.xlabel(x_label)
+        pyplot.ylabel(y_label)
         pyplot.grid(True)
         #legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
         legend()
@@ -444,13 +623,14 @@ def get_image_to_show(dataset):
             read = pf.read()
             encoded = base64.b64encode(read)
             matplotlib.pyplot.close()
+
         try:
-            pn = ParameterName.objects.get(schema=sch, name="plot")
+            pn = ParameterName.objects.get(schema=sch, name=hrmc_plot_name)
         except DatasetParameterSet.DoesNotExist:
-            logger.error("schema is missing plot parameter")
+            logger.error("ParameterName is missing %s parameter" % hrmc_plot_name)
             return None
         except MultipleObjectsReturned:
-            logger.error("schema is multiple plot parameters")
+            logger.error("ParameterName is multiple %s parameters" % hrmc_plot_name)
             return None
 
         logger.debug("ready to save")
@@ -465,4 +645,7 @@ def get_image_to_show(dataset):
         return None
     logger.debug("made display_image  %s" % display_image)
     return display_image
+
+
+
 

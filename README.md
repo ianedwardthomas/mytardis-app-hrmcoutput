@@ -7,22 +7,26 @@ the Bioscience Data Platform MyTardis installation.
 Installation
 ------------
 
-Currently requires contextual view branch of the MyTardis system:
-``git clone https://github.com/grischa/mytardis/tree/synch-views mytardis``
+Currently requires mytardis API branch of the MyTardis system:
+``git clone https://github.com/grischa/mytardis/tree/mytardis-api``
+
+which can be installed using the mytardis-chef cookbook.
 
 Then checkout the MyTardis app:
 ``git clone https://github.com/ianedwardthomas/mytardis-app-hrmcoutput hrmc_views``
 to be installed under the ``tardis/apps`` directory
 
-See this repository for more information.
+and use the hrmc2 branch
 
-install ``hrmc.py`` filter  into mytardis::
+cp ``hrmc_views/mytardis/views.py`` to replace tardis_portal/views.py (temporary fix)
 
-    mv hrmc_views/hrmc.py ../../tardis/tardis_portal/filters
+cp ``hrmc_views/mytardis/view_experiment.py`` to replace ``tardis_portal/templates/tardis_portal/view_experiment.html`` (temporary fix)
+
 
 For centos 6 install the matplotlib library::
 
     sudo yum install python-matplotlib
+
 
 In ``tardis/settings.py`` add following::
 
@@ -38,6 +42,8 @@ In ``tardis/settings.py`` add following::
     INSTALLED_APPS += ("tardis.apps.hrmc_views",)
     DATASET_VIEWS = [("http://rmit.edu.au/schemas/hrmcdataset",
         "tardis.apps.hrmc_views.views.view_full_dataset")]
+    EXPERIMENT_VIEWS = [("http://rmit.edu.au/schemas/hrmcexp",
+            "tardis.apps.hrmc_views.views.view_experiment")]
 
     # Add Middleware
     tmp = list(MIDDLEWARE_CLASSES)
@@ -47,10 +53,39 @@ In ``tardis/settings.py`` add following::
 Once installed, use admin tool to create following schema::
 
     Schema(namespace="http://rmit.edu.au/schemas/hrmcdataset",
-        name="hrmc_views"
+        name="hrmc_dataset_views"
         type="Dataset schema"
         Hidden=True)
 
-    ParameterName(name="plot",
-        fullname = "scatterplot",
+
+    ParameterName(name="plot1",
+        fullname = "scatterplot1",
         units="image", datatype=FILENAME)
+
+    ParameterName(name="plot2",
+        fullname = "scatterplots",
+        units="image", datatype=FILENAME)
+
+    Schema(namespace="http://rmit.edu.au/schemas/hrmcexp",
+        name="hrmc_dataset_views"
+        type="Dataset schema"
+        Hidden=True)
+
+    ParameterName(name="plot1",
+        fullname = "scatterplot1",
+        units="image", datatype=FILENAME)
+
+    ParameterName(name="plot2",
+        fullname = "scatterplots",
+        units="image", datatype=FILENAME)
+
+    Schema(namespace="http://rmit.edu.au/schemas/hrmcdataset/output",
+        name="HRMC V2.0 output"
+        type="Dataset schema"
+        Hidden=True)
+
+
+    Schema(namespace="http://rmit.edu.au/schemas/hrmcdataset/input",
+        name="HRMC V2.0 input"
+        type="Dataset schema"
+        Hidden=True)
