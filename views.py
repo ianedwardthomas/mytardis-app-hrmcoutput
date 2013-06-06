@@ -31,19 +31,20 @@ from django.template import Context
 from django.conf import settings
 from django.core.exceptions import MultipleObjectsReturned
 from django.core.exceptions import PermissionDenied
-from tardis.tardis_portal.shortcuts import return_response_error, return_response_not_found
 
+from tardis.tardis_portal.shortcuts import return_response_error
+from tardis.tardis_portal.shortcuts import return_response_not_found
 from tardis.urls import getTardisApps
 from tardis.tardis_portal.auth import decorators as authz
 from tardis.tardis_portal.models import Dataset, Experiment
 from tardis.tardis_portal.shortcuts import get_experiment_referer
 from tardis.tardis_portal.shortcuts import render_response_index
-from tardis.tardis_portal.models import Schema, DatasetParameterSet, ExperimentParameterSet
-from tardis.tardis_portal.models import ParameterName, DatasetParameter, ExperimentParameter
+from tardis.tardis_portal.models import Schema, DatasetParameterSet
+from tardis.tardis_portal.models import ExperimentParameterSet
+from tardis.tardis_portal.models import ParameterName, DatasetParameter
+from tardis.tardis_portal.models import ExperimentParameter
 from tardis.tardis_portal.models import Dataset_File
 from tardis.tardis_portal.views import SearchQueryString
-from tardis.tardis_portal.auth import decorators as authz
-
 from tardis.tardis_portal.views import _add_protocols_and_organizations
 
 # import and configure matplotlib library
@@ -59,7 +60,6 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# TODO: contextual view should pass info about DATASET view to its view
 HRMC_DATASET_SCHEMA = "http://rmit.edu.au/schemas/hrmcdataset"
 HRMC_OUTPUT_DATASET_SCHEMA = "http://rmit.edu.au/schemas/hrmcdataset/output"
 HRMC_EXPERIMENT_SCHEMA = "http://rmit.edu.au/schemas/hrmcexp"
@@ -67,9 +67,10 @@ DATA_ERRORS_FILE = "data_errors.dat"
 DS_NAME_SEP = "_"
 STEP_COLUMN_NUM = 0
 ERRGR_COLUMN_NUM = 28
+MARKER_LIST = ('x', '+', 'o')
+COLOR_LIST = ('b','g','r','c','m','y','k')
 STEP_LABEL = "Step"
 ERRGR_LABEL = "ERRGr*wf"
-
 
 
 @authz.experiment_access_required
@@ -116,6 +117,19 @@ def view_experiment(request, experiment_id,
         c['search'] = request.GET['search']
     if 'load' in request.GET:
         c['load'] = request.GET['load']
+
+    # TODO, FIXME: Each refresh of page triggers recalculation of graphs
+    # to allow newly arrived datasets to be integrated into the plots.
+    # However, this is a potential DoS vector as new tardis store files are
+    # created
+    # with each refresh.  This is made worse if experiment is public.
+    # Solutions:
+    # - only set HRMC_DATA_SCHEMA schema once all data
+    #   has arrived, and then only generate the graphs once at that point and
+    #   only read after that point.  Waiting on contextual view ability to set
+    #   parametersets on existing experiments.
+    # - allow creation of new files up until experiment is public, then set
+    #   just last version.
 
     display_images = []
     image_to_show = get_exp_images_to_show1(experiment)
@@ -203,19 +217,34 @@ def view_full_dataset(request, dataset_id):
 
     display_images = []
 
+    # TODO, FIXME: Each refresh of page triggers recalculation of graphs
+    # to allow newly arrived datafiles to be integrated into the plots.
+    # However, this is a potential DoS vector as new tardis store files are
+    # created
+    # with each refresh.  This is made worse if experiment/dataset is public.
+    # Solutions:
+    # - only set HRMC_DATA_SCHEMA schema once all data
+    #   has arrived, and then only generate the graphs once at that point and
+    #   only read after that point.  Waiting on contextual view ability to set
+    #   parametersets on existing datasets.
+    # - allow creation of new files up until experiment is public, then set
+    #   just last version.
+
     # plot psd.dat and PSD_exp.dat versus r
-    image_to_show = get_dataset_image_to_show(dataset, sch, dps, hrmc_plot_name="plot1",
+    image_to_show = get_dataset_image_to_show(dataset,
+        sch, dps, hrmc_plot_name="plot1",
         filename1="psd.dat", filename2="PSD_exp.dat",
-        file_label1= "psd", file_label2="PSD_exp",
+        file_label1="psd", file_label2="PSD_exp",
         x_label="r (Angstroms)",
         y_label="g(r)")
     if image_to_show:
         display_images.append(image_to_show)
 
     # plot data_grfinal.dat and input_gr.dat versus r
-    image_to_show = get_dataset_image_to_show(dataset, sch, dps, hrmc_plot_name="plot2",
+    image_to_show = get_dataset_image_to_show(dataset,
+        sch, dps, hrmc_plot_name="plot2",
         filename1="data_grfinal.dat", filename2="input_gr.dat",
-        file_label1="data_grfinal", file_label2= "input_gr",
+        file_label1="data_grfinal", file_label2="input_gr",
         x_label="r (Angstroms)",
         y_label="g(r)")
     if image_to_show:
@@ -250,11 +279,15 @@ def view_full_dataset(request, dataset_id):
 
 def get_exp_images_to_show1(experiment):
     """
-    Graph iteration number versus PSD criterion value ( a scatter plot with M points per iteration number)
+    Graph iteration number versus PSD criterion value ( a scatter
+        plot with M points per iteration number)
+
+
     """
     # check we are setup correctly.
     try:
-        hrmc_dataset_schema = Schema.objects.get(namespace__exact=HRMC_DATASET_SCHEMA,
+        Schema.objects.get(
+            namespace__exact=HRMC_DATASET_SCHEMA,
             type=Schema.DATASET)
     except Schema.DoesNotExist:
         logger.debug("no hrmc dataset schema")
@@ -264,7 +297,8 @@ def get_exp_images_to_show1(experiment):
         return None
 
     try:
-        hrmc_experiment_schema = Schema.objects.get(namespace__exact=HRMC_EXPERIMENT_SCHEMA,
+        hrmc_experiment_schema = Schema.objects.get(
+            namespace__exact=HRMC_EXPERIMENT_SCHEMA,
             type=Schema.EXPERIMENT)
     except Schema.DoesNotExist:
         logger.debug("no hrmc experiment schema")
@@ -274,7 +308,8 @@ def get_exp_images_to_show1(experiment):
         return None
 
     try:
-        hrmc_output_dataset_schema = Schema.objects.get(namespace__exact=HRMC_OUTPUT_DATASET_SCHEMA,
+        hrmc_output_dataset_schema = Schema.objects.get(
+            namespace__exact=HRMC_OUTPUT_DATASET_SCHEMA,
             type=Schema.DATASET)
     except Schema.DoesNotExist:
         logger.debug("no hrmc dataset schema")
@@ -284,7 +319,8 @@ def get_exp_images_to_show1(experiment):
         return None
 
     try:
-        eps = ExperimentParameterSet.objects.get(schema=hrmc_experiment_schema, experiment=experiment)
+        eps = ExperimentParameterSet.objects.get(
+            schema=hrmc_experiment_schema, experiment=experiment)
     except ExperimentParameterSet.DoesNotExist:
         logger.debug("exp parameterset not found")
         return None
@@ -293,11 +329,23 @@ def get_exp_images_to_show1(experiment):
         # NB: If admin tool added additional param set,
         # we know that all data will be the same for this schema
         # so can safely delete any extras we find.
-        pslist = [x.id for x in ExperimentParameterSet.objects.filter(schema=sch,
+        pslist = [x.id for x in ExperimentParameterSet.objects.filter(
+            schema=hrmc_experiment_schema,
             experiment=experiment)]
         logger.debug("pslist=%s" % pslist)
         ExperimentParameterSet.objects.filter(id__in=pslist[1:]).delete()
         eps = ExperimentParameterSet.objects.get(id=pslist[0])
+
+    try:
+        pn = ParameterName.objects.get(
+            schema=hrmc_experiment_schema, name="plot1")
+    except ParameterName.DoesNotExist:
+        logger.error("schema is missing plot parameter")
+        return None
+    except MultipleObjectsReturned:
+        logger.error("schema is multiple plot parameters")
+        return None
+    logger.debug("pn=%s" % pn)
 
     CRITERION_FILE = "criterion.txt"
     DS_NAME_SEP = "_"
@@ -306,7 +354,8 @@ def get_exp_images_to_show1(experiment):
     for df in experiment.get_datafiles().filter(filename=CRITERION_FILE):
         logger.debug("df=%s" % df)
         try:
-            ps = DatasetParameterSet.objects.get(schema=hrmc_output_dataset_schema, dataset=df.dataset)
+            DatasetParameterSet.objects.get(
+                schema=hrmc_output_dataset_schema, dataset=df.dataset)
         except DatasetParameterSet.DoesNotExist:
             logger.debug("criterion file found in non hrmc dataset")
             continue
@@ -351,9 +400,20 @@ def get_exp_images_to_show1(experiment):
         fig = matplotlib.pyplot.gcf()
         fig.set_size_inches(15.5, 13.5)
         ax = fig.add_subplot(111, frame_on=False)
+        logger.debug("ready to save")
+        try:
+            ep = ExperimentParameter.objects.get(
+                parameterset=eps,
+                name=pn)
+        except ExperimentParameter.DoesNotExist:
+            ep = ExperimentParameter(
+                parameterset=eps,
+                name=pn)
+        except MultipleObjectsReturned:
+            logger.error("multiple hrmc experiment schemas returned")
+            return None
 
         # Create a subplot.
-        #ax.scatter(xs, ys, color="red", markeredgecolor='red', marker="x", label="criterion")
         ax.scatter(xs, ys, color="blue",  marker="x", label="criterion")
 
         pfile = tempfile.mktemp()
@@ -372,21 +432,7 @@ def get_exp_images_to_show1(experiment):
             read = pf.read()
             encoded = base64.b64encode(read)
             matplotlib.pyplot.close()
-        try:
-            pn = ParameterName.objects.get(schema=hrmc_experiment_schema, name="plot1")
-        except ParameterName.DoesNotExist:
-            logger.error("schema is missing plot parameter")
-            return None
-        except MultipleObjectsReturned:
-            logger.error("schema is multiple plot parameters")
-            return None
 
-        logger.debug("pn=%s" % pn)
-
-        logger.debug("ready to save")
-
-        ep = ExperimentParameter(parameterset=eps,
-            name=pn)
         ep.string_value = encoded
         ep.save()
 
@@ -394,12 +440,21 @@ def get_exp_images_to_show1(experiment):
     else:
         return None
 
+
 def get_exp_images_to_show2(experiment):
     """
-    For the final iteration of a run, graph step number versus ERRgr*wf  from the data_errors.dat for each calculation (scatter of N values per step number)
+    For the final iteration of a run, graph step number versus ERRgr*wf
+    from the data_errors.dat for each calculation (scatter of N values
+        per step number)
     """
+
+    import itertools
+    markiter = itertools.cycle(MARKER_LIST)
+    coloriter = itertools.cycle(COLOR_LIST)
+
     try:
-        hrmc_dataset_schema = Schema.objects.get(namespace__exact=HRMC_DATASET_SCHEMA,
+        Schema.objects.get(
+            namespace__exact=HRMC_DATASET_SCHEMA,
             type=Schema.DATASET)
     except Schema.DoesNotExist:
         logger.debug("no hrmc dataset schema")
@@ -409,7 +464,8 @@ def get_exp_images_to_show2(experiment):
         return None
 
     try:
-        hrmc_experiment_schema = Schema.objects.get(namespace__exact=HRMC_EXPERIMENT_SCHEMA,
+        hrmc_experiment_schema = Schema.objects.get(
+            namespace__exact=HRMC_EXPERIMENT_SCHEMA,
             type=Schema.EXPERIMENT)
     except Schema.DoesNotExist:
         logger.debug("no hrmc experiment schema")
@@ -419,7 +475,8 @@ def get_exp_images_to_show2(experiment):
         return None
 
     try:
-        hrmc_output_dataset_schema = Schema.objects.get(namespace__exact=HRMC_OUTPUT_DATASET_SCHEMA,
+        hrmc_output_dataset_schema = Schema.objects.get(
+            namespace__exact=HRMC_OUTPUT_DATASET_SCHEMA,
             type=Schema.DATASET)
     except Schema.DoesNotExist:
         logger.debug("no hrmc dataset schema")
@@ -429,7 +486,8 @@ def get_exp_images_to_show2(experiment):
         return None
 
     try:
-        eps = ExperimentParameterSet.objects.get(schema=hrmc_experiment_schema, experiment=experiment)
+        eps = ExperimentParameterSet.objects.get(
+            schema=hrmc_experiment_schema, experiment=experiment)
     except ExperimentParameterSet.DoesNotExist:
         logger.debug("exp parameterset not found")
         return None
@@ -438,7 +496,8 @@ def get_exp_images_to_show2(experiment):
         # NB: If admin tool added additional param set,
         # we know that all data will be the same for this schema
         # so can safely delete any extras we find.
-        pslist = [x.id for x in ExperimentParameterSet.objects.filter(schema=sch,
+        pslist = [x.id for x in ExperimentParameterSet.objects.filter(
+            schema=hrmc_experiment_schema,
             experiment=experiment)]
         logger.debug("pslist=%s" % pslist)
         ExperimentParameterSet.objects.filter(id__in=pslist[1:]).delete()
@@ -449,6 +508,7 @@ def get_exp_images_to_show2(experiment):
 
     fig = matplotlib.pyplot.gcf()
     fig.set_size_inches(15.5, 13.5)
+    matplotlib.axes.set_default_color_cycle(['r', 'g', 'b', 'c'])
     ax = fig.add_subplot(111, frame_on=False)
     re_dbl_fort = re.compile(r'(\d*\.\d+)[dD]([-+]?\d+)')
 
@@ -457,7 +517,8 @@ def get_exp_images_to_show2(experiment):
         .filter(dataset__description__startswith="final"):
         logger.debug("df=%s" % df)
         try:
-            ps = DatasetParameterSet.objects.get(schema=hrmc_output_dataset_schema,
+            DatasetParameterSet.objects.get(
+                schema=hrmc_output_dataset_schema,
                 dataset=df.dataset)
         except DatasetParameterSet.DoesNotExist:
             logger.debug("criterion file found in non hrmc dataset")
@@ -472,10 +533,8 @@ def get_exp_images_to_show2(experiment):
         except ValueError:
             # if file has not been verified
             continue
-
         xs = []
         ys = []
-
         for i, line in enumerate(fp):
             if i == 0:
                 continue
@@ -498,7 +557,8 @@ def get_exp_images_to_show2(experiment):
             ys.append(hrmc_errgr)
 
         if len(ys) and len(xs):
-            ax.scatter(xs, ys, color="blue",  marker="x", label=str(df.dataset.description))
+            ax.scatter(xs, ys, color=coloriter.next(),
+                label=str(df.dataset.description),  marker=markiter.next())
 
         logger.debug("xs=%s" % xs)
         logger.debug("ys=%s" % ys)
@@ -527,7 +587,8 @@ def get_exp_images_to_show2(experiment):
         encoded = base64.b64encode(read)
         matplotlib.pyplot.close()
     try:
-        pn = ParameterName.objects.get(schema=hrmc_experiment_schema, name="plot2")
+        pn = ParameterName.objects.get(
+            schema=hrmc_experiment_schema, name="plot2")
     except ParameterName.DoesNotExist:
         logger.error("schema is missing plot parameter")
         return None
@@ -538,13 +599,21 @@ def get_exp_images_to_show2(experiment):
     logger.debug("ready to save")
     logger.debug("pn=%s" % pn)
 
-    ep = ExperimentParameter(parameterset=eps,
-        name=pn)
+    try:
+        ep = ExperimentParameter.objects.get(
+            parameterset=eps,
+            name=pn)
+    except ExperimentParameter.DoesNotExist:
+        ep = ExperimentParameter(
+            parameterset=eps,
+            name=pn)
+    except MultipleObjectsReturned:
+        logger.error("multiple hrmc experiment schemas returned")
+        return None
     ep.string_value = encoded
     ep.save()
 
     return ep
-
 
 
 def get_dataset_image_to_show(dataset, sch, ps, hrmc_plot_name,
@@ -626,26 +695,34 @@ def get_dataset_image_to_show(dataset, sch, ps, hrmc_plot_name,
 
         try:
             pn = ParameterName.objects.get(schema=sch, name=hrmc_plot_name)
-        except DatasetParameterSet.DoesNotExist:
-            logger.error("ParameterName is missing %s parameter" % hrmc_plot_name)
+        except ParameterName.DoesNotExist:
+            logger.error(
+                "ParameterName is missing %s parameter" % hrmc_plot_name)
             return None
         except MultipleObjectsReturned:
-            logger.error("ParameterName is multiple %s parameters" % hrmc_plot_name)
+            logger.error(
+                "ParameterName is multiple %s parameters" % hrmc_plot_name)
             return None
 
         logger.debug("ready to save")
 
-        dfp = DatasetParameter(parameterset=ps,
-                                        name=pn)
+        try:
+            dfp = DatasetParameter.objects.get(
+                parameterset=ps,
+                name=pn)
+        except DatasetParameter.DoesNotExist:
+            dfp = DatasetParameter(
+                parameterset=ps,
+                name=pn)
+        except MultipleObjectsReturned:
+            logger.error("multiple hrmc experiment schemas returned")
+            return None
         dfp.string_value = encoded
         dfp.save()
+
         display_image = dfp
     else:
         logger.debug("one or more files unavailable")
         return None
     logger.debug("made display_image  %s" % display_image)
     return display_image
-
-
-
-
