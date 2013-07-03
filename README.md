@@ -28,6 +28,7 @@ NB: This instruction is adapted from https://github.com/mytardis/mytardis-chef/w
     git clone https://github.com/mytardis/mytardis-chef.git
     cd mytardis-chef
     if [ $http_proxy != "" ]; then echo http_proxy '"'$http_proxy'"' >> solo/solo.rb;  fi
+    echo 'Done'
     EOF
 
 Change the values of "repo" and "branch" in ``/var/chef-solo/mytardis-chef/roles/mytardis-bdp-milestone1.json`` 
@@ -35,9 +36,10 @@ and  ``/var/chef-solo/mytardis-chef/roles/mytardis.json``
 
         "repo": "https://github.com/grischa/mytardis.git",
         "branch": "mytardis-api",
-        
+
 Run chef-solo
 
+    cd /var/chef-solo/mytardis-chef
     chef-solo -c solo/solo.rb -j solo/node.json -ldebug
     
 
