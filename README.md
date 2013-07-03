@@ -4,6 +4,14 @@ HRMC ContextualViews
 Creates scatter plots of HRMC output data to summarise datasets within
 the Bioscience Data Platform MyTardis installation.
 
+Prerequisite
+------------
+
+Install Mytardis. Chef-based installation guide is available in the following site.
+
+https://github.com/mytardis/mytardis-chef/wiki/Chef-Solo-Guide
+
+
 Installation
 ------------
 
