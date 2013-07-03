@@ -7,10 +7,45 @@ the Bioscience Data Platform MyTardis installation.
 Prerequisite
 ------------
 
-Install Mytardis. Chef-based installation guide is available in the following site.
+Install MyTardis. For Centos 6x, follow the instruction below. 
 
-https://github.com/mytardis/mytardis-chef/wiki/Chef-Solo-Guide
+NB: This instruction is adapted from https://github.com/mytardis/mytardis-chef/wiki/Chef-Solo-Guide
 
+    sudo -E bash <<EOF
+    rpm --httpproxy $http_proxy -Uvh http://rbel.frameos.org/rbel6
+    yum -y install ruby ruby-devel ruby-rdoc ruby-shadow gcc gcc-c++ automake autoconf make curl dmidecode
+    cd /tmp
+    curl -O http://production.cf.rubygems.org/rubygems/rubygems-1.8.10.tgz
+    tar zxf rubygems-1.8.10.tgz
+    cd rubygems-1.8.10
+    ruby setup.rb --no-format-executable
+    # Bug in version 11.4.4 of gem. 
+    gem install chef --no-ri --no-rdoc --version '11.4.2'
+    yum -y install git
+    mkdir -p /var/chef-solo
+    cd /var/chef-solo
+    mkdir mytardis-chef
+    git clone https://github.com/mytardis/mytardis-chef.git
+    cd mytardis-chef
+    if [ $http_proxy != "" ]; then echo http_proxy '"'$http_proxy'"' >> solo/solo.rb;  fi
+    EOF
+
+Change the values of "repo" and "branch" in ``/var/chef-solo/mytardis-chef/roles/mytardis-bdp-milestone1.json`` 
+and  ``/var/chef-solo/mytardis-chef/roles/mytardis.json``
+
+        "repo": "https://github.com/grischa/mytardis.git",
+        "branch": "mytardis-api",
+        
+Run chef-solo
+
+    chef-solo -c solo/solo.rb -j solo/node.json -ldebug
+    
+
+Change directory to Mytardis source code
+``cd /opt/mytardis/current``
+
+Checkout mytardis-api branch
+``git checkout mytardis-api``
 
 Installation
 ------------
