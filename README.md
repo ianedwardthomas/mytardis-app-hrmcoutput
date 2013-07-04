@@ -45,32 +45,31 @@ and  ``/var/chef-solo/mytardis-chef/roles/mytardis.json``
 Run chef-solo
 
     cd /var/chef-solo/mytardis-chef
-    chef-solo -c solo/solo.rb -j solo/node.json -ldebug
+    chef-solo -c solo/solo.rb -j solo/node.json -ldebug   
     
-Switch to mytardis user
+    
+Checkout mytardis-api branch and rebuild MyTardis as mytardis user
     
     su - mytardis
-    
-Checkout mytardis-api branch and rebuild MyTardis
-    
     cd /opt/mytardis/current
     git checkout mytardis-api
     bin/buildout -c buildout-prod.cfg install
     bin/django syncdb --noinput --migrate 
     bin/django collectstatic -l --noinput
+    exit
     
-
 
 Installation
 ------------
 
-Checkout the MyTardis contextual views app:
+Checkout the MyTardis contextual views app as mytardis user:
 
+    su - mytardis
     cd /opt/mytardis/current/tardis/apps/
     git clone https://github.com/ianedwardthomas/mytardis-app-hrmcoutput hrmc_views
     cd hrmc_views
     git checkout hrmc2
-    
+    exit
 
 Edit line 239 of /opt/mytardis/current/tardis/tardis_portal/views.py. Replace 
 ``parameter = DatafileParameter.objects.get(pk=parameter_id)`` by 
