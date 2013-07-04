@@ -84,6 +84,11 @@ Edit line 239 of /opt/mytardis/current/tardis/tardis_portal/views.py. Replace
 ``parameter = DatasetParameter.objects.get(pk=parameter_id)``
 
 
+Install ``hrmc.py`` filter  into mytardis::
+
+    mv hrmc_views/hrmc.py ../../tardis/tardis_portal/filters
+
+
 For centos 6 install the matplotlib library::
 
     yum install python-matplotlib
