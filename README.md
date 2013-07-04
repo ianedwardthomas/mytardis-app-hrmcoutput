@@ -77,21 +77,12 @@ Edit line 239 of /opt/mytardis/current/tardis/tardis_portal/views.py. Replace
 ``parameter = DatasetParameter.objects.get(pk=parameter_id)``
 
 
-to be installed under the ``tardis/apps`` directory
-
-and use the hrmc2 branch
-
-cp ``hrmc_views/mytardis/views.py`` to replace tardis_portal/views.py (temporary fix)
-
-cp ``hrmc_views/mytardis/view_experiment.py`` to replace ``tardis_portal/templates/tardis_portal/view_experiment.html`` (temporary fix)
-
-
 For centos 6 install the matplotlib library::
 
     sudo yum install python-matplotlib
 
 
-In ``tardis/settings.py`` add following::
+In ``/opt/mytardis/current/tardis/settings.py`` add following::
 
     # Post Save Filters
     POST_SAVE_FILTERS = [
