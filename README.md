@@ -78,7 +78,7 @@ Edit line 239 of /opt/mytardis/current/tardis/tardis_portal/views.py. Replace
 
 For centos 6 install the matplotlib library::
 
-    sudo yum install python-matplotlib
+    yum install python-matplotlib
 
 
 In ``/opt/mytardis/current/tardis/settings.py`` add following::
@@ -103,6 +103,12 @@ In ``/opt/mytardis/current/tardis/settings.py`` add following::
     tmp.append('tardis.tardis_portal.filters.FilterInitMiddleware')
     MIDDLEWARE_CLASSES = tuple(tmp)
 
+Restart MyTardis
+    
+    stop mytardis
+    start mytardis
+    
+    
 Once installed, use admin tool to create following schema::
 
     Schema(namespace="http://rmit.edu.au/schemas/hrmcdataset",
