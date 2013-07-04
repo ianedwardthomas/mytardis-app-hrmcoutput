@@ -13,12 +13,17 @@ NB: This instruction is adapted from https://github.com/mytardis/mytardis-chef/w
 
     sudo -E bash <<EOF
     rpm --httpproxy $http_proxy -Uvh http://rbel.frameos.org/rbel6
-    yum -y install ruby ruby-devel ruby-rdoc ruby-shadow gcc gcc-c++ automake autoconf make curl dmidecode
+    wget http://apt.sw.be/redhat/el6/en/x86_64/rpmforge/RPMS/rpmforge-release-0.5.3-1.el6.rf.x86_64.rpm
+    rpm -Uvh rpmforge-release*rpm
+    yum -y install ruby-shadow
+    yum -y install ruby ruby-devel ruby-rdoc gcc gcc-c++ automake autoconf make curl dmidecode
+    
     cd /tmp
     curl -O http://production.cf.rubygems.org/rubygems/rubygems-1.8.10.tgz
     tar zxf rubygems-1.8.10.tgz
     cd rubygems-1.8.10
     ruby setup.rb --no-format-executable
+    
     # Bug in version 11.4.4 of gem. 
     gem install chef --no-ri --no-rdoc --version '11.4.2'
     yum -y install git
@@ -35,30 +40,43 @@ Change the values of "repo" and "branch" in ``/var/chef-solo/mytardis-chef/roles
 and  ``/var/chef-solo/mytardis-chef/roles/mytardis.json``
 
         "repo": "https://github.com/grischa/mytardis.git",
-        "branch": "mytardis-api",
+        "branch": "synch-views",
 
 Run chef-solo
 
     cd /var/chef-solo/mytardis-chef
     chef-solo -c solo/solo.rb -j solo/node.json -ldebug
     
+Switch to mytardis user
+    
+    su - mytardis
+    
+Checkout mytardis-api branch and rebuild MyTardis
+    
+    cd /opt/mytardis/current
+    git checkout mytardis-api
+    bin/buildout -c buildout-prod.cfg install
+    bin/django syncdb --noinput --migrate 
+    bin/django collectstatic -l --noinput
+    
 
-Change directory to Mytardis source code
-``cd /opt/mytardis/current``
-
-Checkout mytardis-api branch
-``git checkout mytardis-api``
 
 Installation
 ------------
 
-Currently requires mytardis API branch of the MyTardis system:
-``git clone https://github.com/grischa/mytardis/tree/mytardis-api``
+Checkout the MyTardis contextual views app:
 
-which can be installed using the mytardis-chef cookbook.
+    cd /opt/mytardis/current/tardis/apps/
+    git clone https://github.com/ianedwardthomas/mytardis-app-hrmcoutput hrmc_views
+    cd hrmc_views
+    git checkout hrmc2
+    
 
-Then checkout the MyTardis app:
-``git clone https://github.com/ianedwardthomas/mytardis-app-hrmcoutput hrmc_views``
+Edit line 239 of /opt/mytardis/current/tardis/tardis_portal/views.py. Replace 
+``parameter = DatafileParameter.objects.get(pk=parameter_id)`` by 
+``parameter = DatasetParameter.objects.get(pk=parameter_id)``
+
+
 to be installed under the ``tardis/apps`` directory
 
 and use the hrmc2 branch
