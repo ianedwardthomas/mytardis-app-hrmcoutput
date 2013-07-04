@@ -62,6 +62,14 @@ Checkout mytardis-api branch and rebuild MyTardis as mytardis user
 Installation
 ------------
 
+Create administrator account as mytardis user
+
+    su - mytardis
+    cd /opt/mytardis/current
+    bin/django createsuperuser
+    exit 
+    
+    
 Checkout the MyTardis contextual views app as mytardis user:
 
     su - mytardis
