@@ -4,31 +4,97 @@ HRMC ContextualViews
 Creates scatter plots of HRMC output data to summarise datasets within
 the Bioscience Data Platform MyTardis installation.
 
+Prerequisite
+------------
+
+Install MyTardis. For Centos 6x, follow the instruction below. 
+
+NB: This instruction is adapted from https://github.com/mytardis/mytardis-chef/wiki/Chef-Solo-Guide
+
+    sudo -E bash <<EOF
+    rpm --httpproxy $http_proxy -Uvh http://rbel.frameos.org/rbel6
+    wget http://apt.sw.be/redhat/el6/en/x86_64/rpmforge/RPMS/rpmforge-release-0.5.3-1.el6.rf.x86_64.rpm
+    rpm -Uvh rpmforge-release*rpm
+    yum -y install ruby-shadow
+    yum -y install ruby ruby-devel ruby-rdoc gcc gcc-c++ automake autoconf make curl dmidecode
+    
+    cd /tmp
+    curl -O http://production.cf.rubygems.org/rubygems/rubygems-1.8.10.tgz
+    tar zxf rubygems-1.8.10.tgz
+    cd rubygems-1.8.10
+    ruby setup.rb --no-format-executable
+    
+    # Bug in version 11.4.4 of gem. 
+    gem install chef --no-ri --no-rdoc --version '11.4.2'
+    yum -y install git
+    mkdir -p /var/chef-solo
+    cd /var/chef-solo
+    mkdir mytardis-chef
+    git clone https://github.com/mytardis/mytardis-chef.git
+    cd mytardis-chef
+    if [ $http_proxy != "" ]; then echo http_proxy '"'$http_proxy'"' >> solo/solo.rb;  fi
+    echo 'Done'
+    EOF
+
+Change the values of "repo" and "branch" in ``/var/chef-solo/mytardis-chef/roles/mytardis-bdp-milestone1.json`` 
+and  ``/var/chef-solo/mytardis-chef/roles/mytardis.json``
+
+        "repo": "https://github.com/grischa/mytardis.git",
+        "branch": "synch-views",
+
+Run chef-solo
+
+    cd /var/chef-solo/mytardis-chef
+    chef-solo -c solo/solo.rb -j solo/node.json -ldebug   
+    
+    
+Checkout mytardis-api branch and rebuild MyTardis as mytardis user
+    
+    su - mytardis
+    cd /opt/mytardis/current
+    git checkout mytardis-api
+    bin/buildout -c buildout-prod.cfg install
+    bin/django syncdb --noinput --migrate 
+    bin/django collectstatic -l --noinput
+    exit
+    
+
 Installation
 ------------
 
-Currently requires mytardis API branch of the MyTardis system:
-``git clone https://github.com/grischa/mytardis/tree/mytardis-api``
+Create administrator account as mytardis user
 
-which can be installed using the mytardis-chef cookbook.
+    su - mytardis
+    cd /opt/mytardis/current
+    bin/django createsuperuser
+    exit 
+    
+    
+Checkout the MyTardis contextual views app as mytardis user:
 
-Then checkout the MyTardis app:
-``git clone https://github.com/ianedwardthomas/mytardis-app-hrmcoutput hrmc_views``
-to be installed under the ``tardis/apps`` directory
+    su - mytardis
+    cd /opt/mytardis/current/tardis/apps/
+    git clone https://github.com/ianedwardthomas/mytardis-app-hrmcoutput hrmc_views
+    cd hrmc_views
+    git checkout hrmc2
+    exit
 
-and use the hrmc2 branch
+Edit line 239 of /opt/mytardis/current/tardis/tardis_portal/views.py. Replace 
+``parameter = DatafileParameter.objects.get(pk=parameter_id)`` by 
+``parameter = DatasetParameter.objects.get(pk=parameter_id)``
 
-cp ``hrmc_views/mytardis/views.py`` to replace tardis_portal/views.py (temporary fix)
 
-cp ``hrmc_views/mytardis/view_experiment.py`` to replace ``tardis_portal/templates/tardis_portal/view_experiment.html`` (temporary fix)
+Install ``hrmc.py`` filter  into mytardis::
+
+    mv hrmc_views/hrmc.py ../../tardis/tardis_portal/filters
 
 
 For centos 6 install the matplotlib library::
 
-    sudo yum install python-matplotlib
+    yum install python-matplotlib
 
 
-In ``tardis/settings.py`` add following::
+In ``/opt/mytardis/current/tardis/settings.py`` add following::
 
     # Post Save Filters
     POST_SAVE_FILTERS = [
@@ -51,6 +117,12 @@ In ``tardis/settings.py`` add following::
     tmp.append('tardis.tardis_portal.filters.FilterInitMiddleware')
     MIDDLEWARE_CLASSES = tuple(tmp)
 
+Restart MyTardis
+    
+    stop mytardis
+    start mytardis
+    
+    
 Once installed, use admin tool to create following schema::
 
     Schema(namespace="http://rmit.edu.au/schemas/hrmcdataset",
