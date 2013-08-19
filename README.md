@@ -39,11 +39,12 @@ In ``tardis/settings.py`` add following::
     MATPLOTLIB_HOME = path.abspath(path.join(path.dirname(__file__),
         '../')).replace('\\', '/')
 
+
     INSTALLED_APPS += ("tardis.apps.hrmc_views",)
+    EXPERIMENT_VIEWS = [("http://rmit.edu.au/schemas/expgraph",
+      "tardis.apps.hrmc_views.graphit.view_experiment")]
     DATASET_VIEWS = [("http://rmit.edu.au/schemas/hrmcdataset",
-        "tardis.apps.hrmc_views.views.view_full_dataset")]
-    EXPERIMENT_VIEWS = [("http://rmit.edu.au/schemas/hrmcexp",
-            "tardis.apps.hrmc_views.views.view_experiment")]
+      "tardis.apps.hrmc_views.views.view_full_dataset")]
 
     # Add Middleware
     tmp = list(MIDDLEWARE_CLASSES)
