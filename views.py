@@ -414,8 +414,11 @@ def get_exp_images_to_show1(experiment):
             return None
 
         # Create a subplot.
-        ax.scatter(xs, ys, color="blue",  marker="x", label="criterion")
-
+        try:
+            ax.scatter(xs, ys, color="blue",  marker="x", label="criterion")
+        except ValueError, e:
+            logger.error(e)
+            return None
         pfile = tempfile.mktemp()
         logger.debug("pfile=%s" % pfile)
 

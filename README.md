@@ -7,7 +7,7 @@ the Bioscience Data Platform MyTardis installation.
 Prerequisite
 ------------
 
-Install MyTardis. For Centos 6x, follow the instruction below. 
+Install MyTardis. For Centos 6x, follow the instruction below.
 
 NB: This instruction is adapted from https://github.com/mytardis/mytardis-chef/wiki/Chef-Solo-Guide
 
@@ -17,14 +17,14 @@ NB: This instruction is adapted from https://github.com/mytardis/mytardis-chef/w
     rpm -Uvh rpmforge-release*rpm
     yum -y install ruby-shadow
     yum -y install ruby ruby-devel ruby-rdoc gcc gcc-c++ automake autoconf make curl dmidecode
-    
+
     cd /tmp
     curl -O http://production.cf.rubygems.org/rubygems/rubygems-1.8.10.tgz
     tar zxf rubygems-1.8.10.tgz
     cd rubygems-1.8.10
     ruby setup.rb --no-format-executable
-    
-    # Bug in version 11.4.4 of gem. 
+
+    # Bug in version 11.4.4 of gem.
     gem install chef --no-ri --no-rdoc --version '11.4.2'
     yum -y install git
     mkdir -p /var/chef-solo
@@ -36,7 +36,7 @@ NB: This instruction is adapted from https://github.com/mytardis/mytardis-chef/w
     echo 'Done'
     EOF
 
-Change the values of "repo" and "branch" in ``/var/chef-solo/mytardis-chef/roles/mytardis-bdp-milestone1.json`` 
+Change the values of "repo" and "branch" in ``/var/chef-solo/mytardis-chef/roles/mytardis-bdp-milestone1.json``
 and  ``/var/chef-solo/mytardis-chef/roles/mytardis.json``
 
         "repo": "https://github.com/grischa/mytardis.git",
@@ -45,19 +45,19 @@ and  ``/var/chef-solo/mytardis-chef/roles/mytardis.json``
 Run chef-solo
 
     cd /var/chef-solo/mytardis-chef
-    chef-solo -c solo/solo.rb -j solo/node.json -ldebug   
-    
-    
+    chef-solo -c solo/solo.rb -j solo/node.json -ldebug
+
+
 Checkout mytardis-api branch and rebuild MyTardis as mytardis user
-    
+
     su - mytardis
     cd /opt/mytardis/current
     git checkout mytardis-api
     bin/buildout -c buildout-prod.cfg install
-    bin/django syncdb --noinput --migrate 
+    bin/django syncdb --noinput --migrate
     bin/django collectstatic -l --noinput
     exit
-    
+
 
 Installation
 ------------
@@ -67,9 +67,9 @@ Create administrator account as mytardis user
     su - mytardis
     cd /opt/mytardis/current
     bin/django createsuperuser
-    exit 
-    
-    
+    exit
+
+
 Checkout the MyTardis contextual views app as mytardis user:
 
     su - mytardis
@@ -79,8 +79,8 @@ Checkout the MyTardis contextual views app as mytardis user:
     git checkout hrmc2
     exit
 
-Edit line 239 of /opt/mytardis/current/tardis/tardis_portal/views.py. Replace 
-``parameter = DatafileParameter.objects.get(pk=parameter_id)`` by 
+Edit line 239 of /opt/mytardis/current/tardis/tardis_portal/views.py. Replace
+``parameter = DatafileParameter.objects.get(pk=parameter_id)`` by
 ``parameter = DatasetParameter.objects.get(pk=parameter_id)``
 
 
@@ -118,47 +118,84 @@ In ``/opt/mytardis/current/tardis/settings.py`` add following::
     MIDDLEWARE_CLASSES = tuple(tmp)
 
 Restart MyTardis
-    
+
     stop mytardis
     start mytardis
-    
-    
+
+
 Once installed, use admin tool to create following schema::
 
-    Schema(namespace="http://rmit.edu.au/schemas/hrmcdataset",
-        name="hrmc_dataset_views"
-        type="Dataset schema"
+    Schema(namespace="http://rmit.edu.au/schemas/expgraph"
+        name="exp_graph"
+        type="Experiment schema"
         Hidden=True)
 
+    ParameterName(name="value_dict",
+        fullname = "value_dict",
+        datatype=STRING)
 
-    ParameterName(name="plot1",
-        fullname = "scatterplot1",
-        units="image", datatype=FILENAME)
+    ParameterName(name="value_keys",
+        fullname = "value_keys",
+        datatype=STRING)
 
-    ParameterName(name="plot2",
+    ParameterName(name="graph_info",
+        fullname = "scatterplots",
+        datatype=STRING)
+
+    ParameterName(name="name",
+        fullname = "scatterplots",
+        datatype=STRING)
+
+    ParameterName(name="plot",
         fullname = "scatterplots",
         units="image", datatype=FILENAME)
 
-    Schema(namespace="http://rmit.edu.au/schemas/hrmcexp",
-        name="hrmc_dataset_views"
+    Schema(namespace="http://rmit.edu.au/schemas/dsetgraph",
+        name="dataset_views"
         type="Dataset schema"
         Hidden=True)
+    ParameterName(name="value_dict",
+        fullname = "value_dict",
+        datatype=STRING)
 
-    ParameterName(name="plot1",
-        fullname = "scatterplot1",
-        units="image", datatype=FILENAME)
+    ParameterName(name="value_keys",
+        fullname = "value_keys",
+        datatype=STRING)
 
-    ParameterName(name="plot2",
+    ParameterName(name="graph_info",
+        fullname = "scatterplots",
+        datatype=STRING)
+
+    ParameterName(name="name",
+        fullname = "scatterplots",
+        datatype=STRING)
+
+    ParameterName(name="plot",
         fullname = "scatterplots",
         units="image", datatype=FILENAME)
 
-    Schema(namespace="http://rmit.edu.au/schemas/hrmcdataset/output",
-        name="HRMC V2.0 output"
+    Schema(namespace="http://rmit.edu.au/schemas/dfilegraph",
+        name="dataset_views"
         type="Dataset schema"
         Hidden=True)
 
+    ParameterName(name="value_dict",
+        fullname = "value_dict",
+        datatype=STRING)
 
-    Schema(namespace="http://rmit.edu.au/schemas/hrmcdataset/input",
-        name="HRMC V2.0 input"
-        type="Dataset schema"
-        Hidden=True)
+    ParameterName(name="value_keys",
+        fullname = "value_keys",
+        datatype=STRING)
+
+    ParameterName(name="graph_info",
+        fullname = "scatterplots",
+        datatype=STRING)
+
+    ParameterName(name="name",
+        fullname = "scatterplots",
+        datatype=STRING)
+
+    ParameterName(name="plot",
+        fullname = "scatterplots",
+        units="image", datatype=FILENAME)
+

@@ -52,14 +52,17 @@ def view_experiment(request, experiment_id,
 
     """
     c = Context({})
+    logger.debug("request=%s" % request)
+    logger.debug("requset.user=%s" % request.user)
 
     try:
-        experiment = Experiment.safe.get(request, experiment_id)
+        experiment = Experiment.safe.get(request.user, experiment_id)
     except PermissionDenied:
         return return_response_error(request)
     except Experiment.DoesNotExist:
         return return_response_not_found(request)
 
+    logger.debug("foobar1")
     c['experiment'] = experiment
     c['has_write_permissions'] = \
         authz.has_write_permissions(request, experiment_id)
@@ -72,6 +75,7 @@ def view_experiment(request, experiment_id,
                 {'name': experiment.title,
                  'link': experiment.get_absolute_url()}]
 
+    logger.debug("foobar2")
     if 'status' in request.POST:
         c['status'] = request.POST['status']
     if 'error' in request.POST:
@@ -96,7 +100,7 @@ def view_experiment(request, experiment_id,
     # - allow creation of new files up until experiment is public, then set
     #   just last version.
 
-    logger.debug("foobar")
+    logger.debug("foobar3")
     (exp_schema, dset_schema, dfile_schema) = load_graph_schemas()
 
 
@@ -115,13 +119,16 @@ def view_experiment(request, experiment_id,
 
     # TODO: check order of loops so that longests loops are not repeated
     for graph_exp_pset in experiment.getParameterSets().filter(schema=exp_schema):
+        logger.debug("graph_exp_pset=%s"% graph_exp_pset)
         try:
             exp_params = ExperimentParameter.objects.filter(
                 parameterset=graph_exp_pset)
         except ExperimentParameter.DoesNotExist:
             continue
 
+
         name = exp_params.get(name__name="name").get()
+        logger.debug("name=%s" % name)
         try:
             v_d = str(exp_params.get(name__name="value_dict").get())
             value_dict = json.loads(v_d)
@@ -129,18 +136,22 @@ def view_experiment(request, experiment_id,
             logger.error(e)
             continue
 
+        logger.debug("value_dict=%s" % value_dict)
         try:
             value_keys = json.loads(str(exp_params.get(name__name="value_keys").get()))
         except ValueError, e:
             logger.error(e)
             continue
+        logger.debug("value_keys=%s" % value_keys)
+
         graph_info = json.loads(str(exp_params.get(name__name="graph_info").get()))
 
+        logger.debug("graph_info=%s" % graph_info)
+
         plots = []
-        for i, key in enumerate(value_keys):
+        for m, key in enumerate(value_keys):
             logger.debug("key=%s" % key)
             graph_vals = defaultdict(list)
-
 
             for dset in Dataset.objects.filter(experiments=experiment):
                 logger.debug("dset=%s" % dset)
@@ -153,7 +164,7 @@ def view_experiment(request, experiment_id,
                             parameterset=graph_dset_pset)
                     except DatasetParameter.DoesNotExist:
                         continue
-                    logger.debug("dset_params=%s"  % dset_params)
+                    logger.debug("dset_params=%s" % dset_params)
 
                     dset_name = dset_params.get(name__name="name").get()
                     dvd = str(dset_params.get(name__name="value_dict").get())
@@ -169,7 +180,7 @@ def view_experiment(request, experiment_id,
                     #if dset_name != name:
                     #   continue
                     for k, v in dset_value_dict.items():
-                        logger.debug("dset_value_dict[%s] = %s" % (k,v))
+                        logger.debug("dset_value_dict[%s] = %s" % (k, v))
                         if str(k) in key:
                             if isinstance(v, basestring):
                                 logger.debug(v)
@@ -180,13 +191,15 @@ def view_experiment(request, experiment_id,
                                     graph_vals[k].append(v)
                             elif isinstance(v, (int, long)):
                                 graph_vals[k].append(v)
+                            elif isinstance(v, float):
+                                graph_vals[k].append(float(v))
                             else:
                                 for l in list(v):
                                     graph_vals[k].append(l)
                         else:
                             logger.warn("%s not in %s" % (k, key))
                             pass
-                    logger.debug("graph_vals=%s" % graph_vals)
+                logger.debug("graph_vals=%s" % graph_vals)
 
             #find constants from node via value_keys
             i = 0
@@ -201,11 +214,15 @@ def view_experiment(request, experiment_id,
                         i += 1
                     elif isinstance(x, (int, long)):
                         graph_vals[x].append(int(x))
+                    elif isinstance(x, float):
+                        graph_vals[x].append(float(x))
                     else:
                         pass
                         # for y in list(x):
                         #     graph_vals["%s/%s" % (schema,i)].append(y)
                         # i += 1
+
+            logger.debug("graph_vals=%s" % graph_vals)
 
             #find constants from node via value_dict
             for k, v in value_dict.items():
@@ -220,14 +237,19 @@ def view_experiment(request, experiment_id,
                             graph_vals[k].append(v)
                     elif isinstance(v, (int, long)):
                         graph_vals[k].append(v)
+                    elif isinstance(v, float):
+                        graph_vals[k].append(float(v))
                     else:
                         for l in list(v):
                             graph_vals[k].append(l)
+            logger.debug("graph_vals=%s" % graph_vals)
+
 
             # reorder based on value_keys
             res = []
+            logger.debug("m=%s" % m)
             if 'legends' in graph_info:
-                res.append(graph_info['legends'][i])
+                res.append(graph_info['legends'])
             else:
                 res.append([])
             i = 0
@@ -236,15 +258,17 @@ def view_experiment(request, experiment_id,
                     res.append((k, graph_vals[k]))
                 elif isinstance(k, (int, long)):
                     res.append((k, graph_vals[k]))
+                elif isinstance(k, float):
+                    res.append((k, graph_vals[k]))
                 else:
                     key = "%s/%s" % (name, i)
                     res.append((key, graph_vals[key]))
                     i += 1
 
-            logger.debug("res=%s" %res)
+            logger.debug("res=%s" % res)
             plots.append(res)
 
-        logger.debug(("plots=" % plots))
+        logger.debug(("plots=%s" % plots))
         mtp = MatPlotLib()
         image_to_show = mtp.graph(graph_info, exp_schema, graph_exp_pset, "plot", plots)
         if image_to_show:

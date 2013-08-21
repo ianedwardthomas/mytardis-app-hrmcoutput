@@ -44,19 +44,25 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+MARKER_LIST = ('x', '+', 'o')
+COLOR_LIST = ('b','g','r','c','m','y','k')
 
 class MatPlotLib(GraphBackend):
 
     def graph(self, graph_info, schema, parameter_set, plot_name,  plots):
 
+        import itertools
+        markiter = itertools.cycle(MARKER_LIST)
+        coloriter = itertools.cycle(COLOR_LIST)
+
         #fig = matplotlib.pyplot.figure()
         fig = matplotlib.pyplot.gcf()
         #fig.set_size_inches(15.5, 13.5)
-        print "plots=%s" % plots
+        logger.debug("plots=%s" % plots)
         colors = ['blue', 'red']
         ax = None
         for i, plot in enumerate(plots):
-            print "plot=%s" % plot
+            logger.debug("plot=%s" % plot)
             vals = []
             for j, coord in enumerate(plot):
                 if not j:
@@ -65,10 +71,10 @@ class MatPlotLib(GraphBackend):
                     else:
                         label = None
                     continue
-                print "coord=%s" % str(coord)
+                logger.debug("coord=%s" % str(coord))
                 vals.append(coord[1])
 
-            print "vals=%s" % vals
+            logger.debug("vals=%s" % vals)
 
             if not ax:
                 if len(vals) == 3:
@@ -78,7 +84,29 @@ class MatPlotLib(GraphBackend):
                     ax = fig.add_subplot(111, frame_on=False)
 
             if vals:
-                ax.scatter(*vals, color=colors[i],  marker="x", label=label)
+                logger.debug("vals=%s" % vals)
+                xs, ys = vals
+                if 'legends' in graph_info:
+                    try:
+                        l = graph_info['legends'][i]
+                    except IndexError,e:
+                        logger.warn(e)
+                        l = ""
+                else:
+                    l = ""
+                logger.debug("legend=%s" % l)
+                # Create a subplot.
+                try:
+                    ax.scatter(xs, ys, color=coloriter.next(),  marker=markiter.next(), label=l)
+                except ValueError, e:
+                    # TODO: handle errors
+                    logger.error(e)
+                    continue
+                except NameError, e:
+                    # TODO: handle errors
+                    logger.error(e)
+                    continue
+
 
         if ax:
             if 'axes' in graph_info:
