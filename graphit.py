@@ -103,11 +103,10 @@ def view_experiment(request, experiment_id,
     logger.debug("foobar3")
     (exp_schema, dset_schema, dfile_schema) = load_graph_schemas()
 
-
     functions = {
-        'tardis.tardis_portal.filters.getdf': [1,3,5,7], #only works for lists
-        'tardis.tardis_portal.filters.x': [2,4,6,8],
-        'tardis.tardis_portal.filters.y': [11,14,15,35],
+        'tardis.tardis_portal.filters.getdf': [1, 3, 5 , 7],  #only works for lists
+        'tardis.tardis_portal.filters.x': [2, 4 , 6, 8],
+        'tardis.tardis_portal.filters.y': [11, 14, 15, 35],
     }
 
     logger.debug("foogar")
@@ -116,37 +115,21 @@ def view_experiment(request, experiment_id,
 
     display_images = []
 
-
     # TODO: check order of loops so that longests loops are not repeated
     for graph_exp_pset in experiment.getParameterSets().filter(schema=exp_schema):
-        logger.debug("graph_exp_pset=%s"% graph_exp_pset)
+        logger.debug("graph_exp_pset=%s" % graph_exp_pset)
         try:
             exp_params = ExperimentParameter.objects.filter(
                 parameterset=graph_exp_pset)
         except ExperimentParameter.DoesNotExist:
             continue
 
-
-        name = exp_params.get(name__name="name").get()
-        logger.debug("name=%s" % name)
         try:
-            v_d = str(exp_params.get(name__name="value_dict").get())
-            value_dict = json.loads(v_d)
+            (exp_name, value_keys, value_dict, graph_info) = \
+                _get_graph_data(exp_params)
         except ValueError, e:
             logger.error(e)
             continue
-
-        logger.debug("value_dict=%s" % value_dict)
-        try:
-            value_keys = json.loads(str(exp_params.get(name__name="value_keys").get()))
-        except ValueError, e:
-            logger.error(e)
-            continue
-        logger.debug("value_keys=%s" % value_keys)
-
-        graph_info = json.loads(str(exp_params.get(name__name="graph_info").get()))
-
-        logger.debug("graph_info=%s" % graph_info)
 
         plots = []
         for m, key in enumerate(value_keys):
@@ -157,6 +140,7 @@ def view_experiment(request, experiment_id,
                 logger.debug("dset=%s" % dset)
                 dset_pset = dset.getParameterSets() \
                     .filter(schema=dset_schema)
+
                 for graph_dset_pset in dset_pset:
                     logger.debug("graph_dset_pset=%s" % graph_dset_pset)
                     try:
@@ -164,109 +148,35 @@ def view_experiment(request, experiment_id,
                             parameterset=graph_dset_pset)
                     except DatasetParameter.DoesNotExist:
                         continue
-                    logger.debug("dset_params=%s" % dset_params)
 
-                    dset_name = dset_params.get(name__name="name").get()
-                    dvd = str(dset_params.get(name__name="value_dict").get())
-                    logger.debug("dvd=%s" % dvd)
-                    dset_value_dict = json.loads(dvd)
-                    dset_value_keys = json.loads(str(dset_params.get(name__name="value_keys").get()))
-                    dset_graph_info = json.loads(str(dset_params.get(name__name="graph_info").get()))
+                    logger.debug("exp_name=%s" % exp_name)
 
-                    logger.debug("name=%s" % name)
-                    logger.debug("dset_name=%s" % dset_name)
-                    logger.debug("dset_value_dict=%s" % dset_value_dict)
+                    logger.debug("graph_vals=%s" % graph_vals)
+                    try:
+                        graph_vals = _match_key_vals(graph_vals, dset_params, key, functions)
+                    except ValueError, e:
+                        logger.error(e)
+                        continue
+                    logger.debug("graph_vals=%s" % graph_vals)
 
-                    #if dset_name != name:
-                    #   continue
-                    for k, v in dset_value_dict.items():
-                        logger.debug("dset_value_dict[%s] = %s" % (k, v))
-                        if str(k) in key:
-                            if isinstance(v, basestring):
-                                logger.debug(v)
-                                if v in functions:
-                                    graph_vals[k].extend(
-                                        functions[v])
-                                else:
-                                    graph_vals[k].append(v)
-                            elif isinstance(v, (int, long)):
-                                graph_vals[k].append(v)
-                            elif isinstance(v, float):
-                                graph_vals[k].append(float(v))
-                            else:
-                                for l in list(v):
-                                    graph_vals[k].append(l)
-                        else:
-                            logger.warn("%s not in %s" % (k, key))
-                            pass
                 logger.debug("graph_vals=%s" % graph_vals)
 
-            #find constants from node via value_keys
-            i = 0
-            for x in key:
-                if '/' not in x:
-                    if isinstance(x, basestring):
-                        if x in functions:
-                            graph_vals[x].extend(functions[x])
-                        else:
-                            logger.debug("Cannot resolve %s in reference %s" % (x, key))
-                        #graph_vals["%s/%s" % (schema, i)].append(functions[x])
-                        i += 1
-                    elif isinstance(x, (int, long)):
-                        graph_vals[x].append(int(x))
-                    elif isinstance(x, float):
-                        graph_vals[x].append(float(x))
-                    else:
-                        pass
-                        # for y in list(x):
-                        #     graph_vals["%s/%s" % (schema,i)].append(y)
-                        # i += 1
+            try:
+                graph_vals.update(_match_constants(key, functions))
+            except ValueError, e:
+                logger.error(e)
+                continue
 
             logger.debug("graph_vals=%s" % graph_vals)
 
-            #find constants from node via value_dict
-            for k, v in value_dict.items():
-                if k in key:
-                    if isinstance(v, basestring):
-                        if '/' not in v:
-                            if v in functions:
-                                graph_vals[k].extend(functions[v])
-                            else:
-                                logger.debug("cannot resolve %s:%s in reference %s" % (k, v, key))
-                        else:
-                            graph_vals[k].append(v)
-                    elif isinstance(v, (int, long)):
-                        graph_vals[k].append(v)
-                    elif isinstance(v, float):
-                        graph_vals[k].append(float(v))
-                    else:
-                        for l in list(v):
-                            graph_vals[k].append(l)
-            logger.debug("graph_vals=%s" % graph_vals)
+            try:
+                plot = reorder_keys(graph_vals, graph_info, key, exp_name)
+            except ValueError, e:
+                logger.error(e)
+                continue
+            logger.debug("plot=%s" % plot)
 
-
-            # reorder based on value_keys
-            res = []
-            logger.debug("m=%s" % m)
-            if 'legends' in graph_info:
-                res.append(graph_info['legends'])
-            else:
-                res.append([])
-            i = 0
-            for k in key:
-                if isinstance(k, basestring):
-                    res.append((k, graph_vals[k]))
-                elif isinstance(k, (int, long)):
-                    res.append((k, graph_vals[k]))
-                elif isinstance(k, float):
-                    res.append((k, graph_vals[k]))
-                else:
-                    key = "%s/%s" % (name, i)
-                    res.append((key, graph_vals[key]))
-                    i += 1
-
-            logger.debug("res=%s" % res)
-            plots.append(res)
+            plots.append(plot)
 
         logger.debug(("plots=%s" % plots))
         mtp = MatPlotLib()
@@ -301,6 +211,117 @@ def view_experiment(request, experiment_id,
     c['apps'] = zip(appurls, appnames)
 
     return HttpResponse(render_response_index(request, template_name, c))
+
+
+def _get_graph_data(params):
+    name = params.get(name__name="name").get()
+    logger.debug("name=%s" % name)
+
+    v_d = str(params.get(name__name="value_dict").get())
+    value_dict = json.loads(v_d)
+    logger.debug("value_dict=%s" % value_dict)
+
+    logger.debug("value_dict=%s" % value_dict)
+    value_keys = json.loads(str(params.get(name__name="value_keys").get()))
+    logger.debug("value_keys=%s" % value_keys)
+
+    graph_info = json.loads(str(params.get(name__name="graph_info").get()))
+    logger.debug("graph_info=%s" % graph_info)
+
+    return (name, value_keys, value_dict, graph_info)
+
+
+def _match_key_vals(graph_vals, params, key, functions):
+
+    logger.debug("params=%s" % params)
+
+    # name = params.get(name__name="name").get()
+    # dvd = str(params.get(name__name="value_dict").get())
+    # logger.debug("dvd=%s" % dvd)
+    # value_dict = json.loads(dvd)
+    # value_keys = json.loads(str(params.get(name__name="value_keys").get()))
+    # graph_info = json.loads(str(params.get(name__name="graph_info").get()))
+
+    (name, value_keys, value_dict, graph_info) = \
+        _get_graph_data(params)
+
+    logger.debug("dset_name=%s" % name)
+    logger.debug("value_dict=%s" % value_dict)
+
+    #TODO:
+    #if parent_name != name:
+    #    continue
+    for k, v in value_dict.items():
+        logger.debug("value_dict[%s] = %s" % (k, v))
+        if str(k) in key:
+            if isinstance(v, basestring):
+                logger.debug(v)
+                if v in functions:
+                    graph_vals[k].extend(
+                        functions[v])
+                else:
+                    graph_vals[k].append(v)
+            elif isinstance(v, (int, long)):
+                graph_vals[k].append(v)
+            elif isinstance(v, float):
+                graph_vals[k].append(float(v))
+            else:
+                for l in list(v):
+                    graph_vals[k].append(l)
+        else:
+            logger.warn("%s not in %s" % (k, key))
+            pass
+
+    return graph_vals
+
+
+def _match_constants(key, functions):
+    #find constants from node via value_keys
+    i = 0
+    graph_vals = defaultdict(list)
+
+    for x in key:
+        if '/' not in x:
+            if isinstance(x, basestring):
+                if x in functions:
+                    graph_vals[x].extend(functions[x])
+                else:
+                    logger.debug("Cannot resolve %s in reference %s" % (x, key))
+                #graph_vals["%s/%s" % (schema, i)].append(functions[x])
+                i += 1
+            elif isinstance(x, (int, long)):
+                graph_vals[x].append(int(x))
+            elif isinstance(x, float):
+                graph_vals[x].append(float(x))
+            else:
+                pass
+                # for y in list(x):
+                #     graph_vals["%s/%s" % (schema,i)].append(y)
+                # i += 1
+
+    return graph_vals
+
+
+def reorder_keys(graph_vals, graph_info,  key, name):
+    # reorder based on value_keys
+    plot = []
+    if 'legends' in graph_info:
+        plot.append(graph_info['legends'])
+    else:
+        plot.append([])
+    i = 0
+    for k in key:
+        if isinstance(k, basestring):
+            plot.append((k, graph_vals[k]))
+        elif isinstance(k, (int, long)):
+            plot.append((k, graph_vals[k]))
+        elif isinstance(k, float):
+            plot.append((k, graph_vals[k]))
+        else:
+            key = "%s/%s" % (name, i)
+            plot.append((key, graph_vals[key]))
+            i += 1
+    return plot
 
 
 def load_graph_schemas():
