@@ -113,6 +113,94 @@ def view_experiment(request, experiment_id,
 
     # Get all experiment graph parameters
 
+
+    """
+
+    display_images = []
+
+    # TODO: check order of loops so that longests loops are not repeated
+    plots = []
+
+    graph_vals = defaultdict(list)
+
+
+    # get datasets
+    for dset in Dataset.objects.filter(experiments=experiment):
+        logger.debug("dset=%s" % dset)
+        dset_psets = dset.getParameterSets() \
+            .filter(schema=dset_schema)
+
+        # get dataset parametersets
+        for dset_pset in dset_psets:
+            logger.debug("dset_pset=%s" % dset_pset)
+            # get dataset params
+            try:
+                dset_params = DatasetParameter.objects.filter(
+                    parameterset=dset_pset)
+            except DatasetParameter.DoesNotExist:
+                continue
+
+            # for each graph experiment pset
+
+            for exp_pset in experiment.getParameterSets().filter(schema=exp_schema):
+                logger.debug("exp_pset=%s" % exp_pset)
+                # get all experiment parameters
+                try:
+                    exp_params = ExperimentParameter.objects.filter(
+                        parameterset=exp_pset)
+                except ExperimentParameter.DoesNotExist:
+                    continue
+
+                try:
+                    (exp_name, value_keys, value_dict, graph_info) = \
+                        _get_graph_data(exp_params)
+                except ValueError, e:
+                    logger.error(e)
+                    continue
+
+                graph_vals = graphs[exp_pset]
+                for m, key in enumerate(value_keys):
+                    logger.debug("key=%s" % key)
+
+                    logger.debug("exp_name=%s" % exp_name)
+
+                    logger.debug("graph_vals=%s" % graph_vals)
+                    try:
+                        graph_vals = _match_key_vals(graph_vals, dset_params, key, functions)
+                    except ValueError, e:
+                        logger.error(e)
+                        continue
+                    logger.debug("graph_vals=%s" % graph_vals)
+
+                    try:
+                        graph_vals.update(_match_constants(key, functions))
+                    except ValueError, e:
+                        logger.error(e)
+                        continue
+
+                    logger.debug("graph_vals=%s" % graph_vals)
+
+
+                    try:
+                        plot = reorder_keys(graph_vals, graph_info, key, exp_name)
+                    except ValueError, e:
+                        logger.error(e)
+                        continue
+                    logger.debug("plot=%s" % plot)
+
+                    plots.append(plot)
+                graphs[exp_psets] = graph_vals
+
+
+    logger.debug(("plots=%s" % plots))
+    mtp = MatPlotLib()
+    image_to_show = mtp.graph(graph_info, exp_schema, graph_exp_pset, "plot", plots)
+    if image_to_show:
+        display_images.append(image_to_show)
+
+
+    """
+
     display_images = []
 
     # TODO: check order of loops so that longests loops are not repeated
@@ -183,6 +271,7 @@ def view_experiment(request, experiment_id,
         image_to_show = mtp.graph(graph_info, exp_schema, graph_exp_pset, "plot", plots)
         if image_to_show:
             display_images.append(image_to_show)
+
 
     # image_to_show = get_exp_images_to_show1(experiment)
     # if image_to_show:
