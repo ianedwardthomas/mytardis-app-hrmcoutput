@@ -40,7 +40,7 @@ Change the values of "repo" and "branch" in ``/var/chef-solo/mytardis-chef/roles
 and  ``/var/chef-solo/mytardis-chef/roles/mytardis.json``
 
         "repo": "https://github.com/grischa/mytardis.git",
-        "branch": "synch-views",
+        "branch": "master",
 
 Run chef-solo
 
@@ -83,12 +83,6 @@ Edit line 239 of /opt/mytardis/current/tardis/tardis_portal/views.py. Replace
 ``parameter = DatafileParameter.objects.get(pk=parameter_id)`` by
 ``parameter = DatasetParameter.objects.get(pk=parameter_id)``
 
-
-Install ``hrmc.py`` filter  into mytardis::
-
-    mv hrmc_views/hrmc.py ../../tardis/tardis_portal/filters
-
-
 For centos 6 install the matplotlib library::
 
     yum install python-matplotlib
@@ -96,26 +90,12 @@ For centos 6 install the matplotlib library::
 
 In ``/opt/mytardis/current/tardis/settings.py`` add following::
 
-    # Post Save Filters
-    POST_SAVE_FILTERS = [
-        ("tardis.tardis_portal.filters.hrmc.make_filter",
-            ["HRMC", "http://rmit.edu.au/schemas/hrmcdataset"]),
-    ]
-
     MATPLOTLIB_HOME = path.abspath(path.join(path.dirname(__file__),
         '../')).replace('\\', '/')
 
-
     INSTALLED_APPS += ("tardis.apps.hrmc_views",)
     EXPERIMENT_VIEWS = [("http://rmit.edu.au/schemas/expgraph",
-      "tardis.apps.hrmc_views.graphit.view_experiment")]
-    DATASET_VIEWS = [("http://rmit.edu.au/schemas/hrmcdataset",
-      "tardis.apps.hrmc_views.views.view_full_dataset")]
-
-    # Add Middleware
-    tmp = list(MIDDLEWARE_CLASSES)
-    tmp.append('tardis.tardis_portal.filters.FilterInitMiddleware')
-    MIDDLEWARE_CLASSES = tuple(tmp)
+            "tardis.apps.hrmc_views.graphit.view_experiment")]
 
 Restart MyTardis
 
@@ -139,21 +119,22 @@ Once installed, use admin tool to create following schema::
         datatype=STRING)
 
     ParameterName(name="graph_info",
-        fullname = "scatterplots",
+        fullname = "graph_info",
         datatype=STRING)
 
     ParameterName(name="name",
-        fullname = "scatterplots",
+        fullname = "name",
         datatype=STRING)
 
     ParameterName(name="plot",
-        fullname = "scatterplots",
+        fullname = "scatterplot",
         units="image", datatype=FILENAME)
 
     Schema(namespace="http://rmit.edu.au/schemas/dsetgraph",
         name="dataset_views"
         type="Dataset schema"
         Hidden=True)
+
     ParameterName(name="value_dict",
         fullname = "value_dict",
         datatype=STRING)
@@ -163,15 +144,15 @@ Once installed, use admin tool to create following schema::
         datatype=STRING)
 
     ParameterName(name="graph_info",
-        fullname = "scatterplots",
+        fullname = "graph_info",
         datatype=STRING)
 
     ParameterName(name="name",
-        fullname = "scatterplots",
+        fullname = "name",
         datatype=STRING)
 
     ParameterName(name="plot",
-        fullname = "scatterplots",
+        fullname = "scatterplot",
         units="image", datatype=FILENAME)
 
     Schema(namespace="http://rmit.edu.au/schemas/dfilegraph",
@@ -188,14 +169,33 @@ Once installed, use admin tool to create following schema::
         datatype=STRING)
 
     ParameterName(name="graph_info",
-        fullname = "scatterplots",
+        fullname = "graph_info",
         datatype=STRING)
 
     ParameterName(name="name",
-        fullname = "scatterplots",
+        fullname = "name",
         datatype=STRING)
 
     ParameterName(name="plot",
-        fullname = "scatterplots",
+        fullname = "scatterplot",
         units="image", datatype=FILENAME)
+
+
+    Schema(namespace="http://rmit.edu.au/schemas/hrmcexp"
+        name="hrmcexp"
+        type="Experiment schema"
+        Hidden=True)
+
+
+    Schema(namespace="http://rmit.edu.au/schemas/hrmcdataset/input"
+        name="hrmc input"
+        type="Dataset schema"
+        Hidden=True)
+
+    Schema(namespace="http://rmit.edu.au/schemas/hrmcdataset/output"
+        name="hrmc output"
+        type="Dataset schema"
+        Hidden=True)
+
+
 

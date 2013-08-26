@@ -115,18 +115,29 @@ class MatPlotLib(GraphBackend):
 
             pyplot.grid(True)
             #legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-            ax.legend()
+            legend()
             #pyplot.xlim(xmin=0)
 
-            pfile = tempfile.mktemp()
+            from os.path import exists, join
+            from os import makedirs
+            from uuid import uuid4 as uuid
+
+            filename = str(uuid())
+            subdir1 = filename[0:2]
+            subdir2 = filename[2:4]
+            dirname = join(settings.METADATA_STORE_PATH, subdir1, subdir2)
+            pfile = join(dirname, filename)
             logger.debug("pfile=%s" % pfile)
+
+            if not exists(dirname):
+                makedirs(dirname)
 
             matplotlib.pyplot.savefig("%s.png" % pfile, dpi=100)
 
-            with open("%s.png" % pfile) as pf:
-                read = pf.read()
-                encoded = base64.b64encode(read)
-                matplotlib.pyplot.close()
+#            with open("%s.png" % pfile) as pf:
+#                read = pf.read()
+#                encoded = base64.b64encode(read)
+            matplotlib.pyplot.close()
 
             # TODO: return encode rather than create Parameters as all
             # backends should do the same thing.
@@ -155,7 +166,7 @@ class MatPlotLib(GraphBackend):
             except MultipleObjectsReturned:
                 logger.error("multiple hrmc experiment schemas returned")
                 return None
-            ep.string_value = encoded
+            ep.string_value = "%s.png" % pfile
             ep.save()
 
             display_image = ep
