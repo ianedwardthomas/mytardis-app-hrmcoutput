@@ -7,12 +7,12 @@ import os
 import tempfile
 import re
 
-from django.core.paginator import Paginator, InvalidPage, EmptyPage
 from django.http import HttpResponse
-from django.template import Context
 from django.conf import settings
-from django.core.exceptions import MultipleObjectsReturned
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator, InvalidPage, EmptyPage
+from django.core.exceptions import MultipleObjectsReturned
+
 
 from tardis.tardis_portal.shortcuts import return_response_error
 from tardis.tardis_portal.shortcuts import return_response_not_found
@@ -23,7 +23,8 @@ from tardis.tardis_portal.shortcuts import get_experiment_referer
 from tardis.tardis_portal.shortcuts import render_response_index
 from tardis.tardis_portal.models import Schema, DatasetParameterSet
 from tardis.tardis_portal.models import ExperimentParameterSet
-from tardis.tardis_portal.models import ParameterName, DatasetParameter
+from tardis.tardis_portal.models import (ParameterName, DatasetParameter,
+    DatafileParameter)
 from tardis.tardis_portal.models import ExperimentParameter
 from tardis.tardis_portal.models import Dataset_File
 from tardis.tardis_portal.views import SearchQueryString
@@ -100,21 +101,22 @@ def view_experiment(request, experiment_id,
     # - allow creation of new files up until experiment is public, then set
     #   just last version.
 
-    logger.debug("foobar3")
     (exp_schema, dset_schema, dfile_schema) = load_graph_schemas()
 
+    # TODO: should be read from domain-specific filter plugins
     functions = {
         'tardis.tardis_portal.filters.getdf': [1, 3, 5 , 7],  #only works for lists
         'tardis.tardis_portal.filters.x': [2, 4 , 6, 8],
         'tardis.tardis_portal.filters.y': [11, 14, 15, 35],
     }
 
-    logger.debug("foogar")
-
     # Get all experiment graph parameters
 
 
     """
+    # TODO: reorder so that datasets are only once, because assume
+    # most expsensive read (followed by experiment)
+
 
     display_images = []
 
@@ -241,7 +243,7 @@ def view_experiment(request, experiment_id,
 
                     logger.debug("graph_vals=%s" % graph_vals)
                     try:
-                        graph_vals = _match_key_vals(graph_vals, dset_params, key, functions)
+                        graph_vals = _match_key_vals(graph_vals, dset_params, key, exp_name, functions)
                     except ValueError, e:
                         logger.error(e)
                         continue
@@ -250,7 +252,7 @@ def view_experiment(request, experiment_id,
                 logger.debug("graph_vals=%s" % graph_vals)
 
             try:
-                graph_vals.update(_match_constants(key, functions))
+                graph_vals.update(_match_constants(key, value_dict,  functions))
             except ValueError, e:
                 logger.error(e)
                 continue
@@ -268,17 +270,47 @@ def view_experiment(request, experiment_id,
 
         logger.debug(("plots=%s" % plots))
         mtp = MatPlotLib()
-        image_to_show = mtp.graph(graph_info, exp_schema, graph_exp_pset, "plot", plots)
-        if image_to_show:
-            display_images.append(image_to_show)
+        plot_name = "plot"
+        pfile = mtp.graph(graph_info, exp_schema, graph_exp_pset, plot_name, plots)
 
+        if pfile:
+            # TODO: return encode rather than create Parameters as all
+            # backends should do the same thing.
+            try:
+                # FIXME: need to select on parameter set here too
+                pn = ParameterName.objects.get(schema=exp_schema, name=plot_name)
+            except ParameterName.DoesNotExist:
+                logger.error(
+                    "ParameterName is missing %s parameter" % plot_name)
+                return None
+            except MultipleObjectsReturned:
+                logger.error(
+                    "ParameterName is multiple %s parameters" % plot_name)
+                return None
 
-    # image_to_show = get_exp_images_to_show1(experiment)
-    # if image_to_show:
-    #     display_images.append(image_to_show)
-    # image_to_show = get_exp_images_to_show2(experiment)
-    # if image_to_show:
-    #     display_images.append(image_to_show)
+            logger.debug("ready to save")
+
+            try:
+                ep = ExperimentParameter.objects.get(
+                    parameterset=graph_exp_pset,
+                    name=pn)
+            except ExperimentParameter.DoesNotExist:
+                ep = ExperimentParameter(
+                    parameterset=graph_exp_pset,
+                    name=pn)
+            except MultipleObjectsReturned:
+                logger.error("multiple hrmc experiment schemas returned")
+                return None
+            ep.string_value = "%s.png" % pfile
+            ep.save()
+
+            display_images.append(ep)
+
+    # TODO: Need some sort of caching so that graphs are only recreated if data
+    # has actually changed.  Also want creation to be async process to the
+    # display of the page.
+    # FIXME: currently, reloading the page creates a brand new graph file,
+    # which could be DoS attack vector.
 
     c['display_images'] = display_images
 
@@ -303,6 +335,11 @@ def view_experiment(request, experiment_id,
 
 
 def _get_graph_data(params):
+
+    # TODO: as this data comes from user editable parameter set in UI,
+    # this data must be validated before accepted.  json loads, is
+    # probably in sufficient, and need to check right formats for values etc.
+
     name = params.get(name__name="name").get()
     logger.debug("name=%s" % name)
 
@@ -320,16 +357,10 @@ def _get_graph_data(params):
     return (name, value_keys, value_dict, graph_info)
 
 
-def _match_key_vals(graph_vals, params, key, functions):
+def _match_key_vals(graph_vals, params, key, parent_name,  functions):
 
     logger.debug("params=%s" % params)
-
-    # name = params.get(name__name="name").get()
-    # dvd = str(params.get(name__name="value_dict").get())
-    # logger.debug("dvd=%s" % dvd)
-    # value_dict = json.loads(dvd)
-    # value_keys = json.loads(str(params.get(name__name="value_keys").get()))
-    # graph_info = json.loads(str(params.get(name__name="graph_info").get()))
+    logger.debug("key=%s" % key)
 
     (name, value_keys, value_dict, graph_info) = \
         _get_graph_data(params)
@@ -337,12 +368,16 @@ def _match_key_vals(graph_vals, params, key, functions):
     logger.debug("dset_name=%s" % name)
     logger.debug("value_dict=%s" % value_dict)
 
-    #TODO:
-    #if parent_name != name:
-    #    continue
     for k, v in value_dict.items():
         logger.debug("value_dict[%s] = %s" % (k, v))
         if str(k) in key:
+
+            id = str(k).split('/')[0]
+            logger.debug("id=%s" % id)
+            if id != name:
+                logger.debug("non match %s to %s" % (id, name))
+                continue
+
             if isinstance(v, basestring):
                 logger.debug(v)
                 if v in functions:
@@ -364,12 +399,16 @@ def _match_key_vals(graph_vals, params, key, functions):
     return graph_vals
 
 
-def _match_constants(key, functions):
-    #find constants from node via value_keys
+def _match_constants(key, value_dict, functions):
+
     i = 0
     graph_vals = defaultdict(list)
 
+    #find constants from node via value_keys
+
+    logger.debug("key=%s" % key)
     for x in key:
+        logger.debug("x=%s" % x)
         if '/' not in x:
             if isinstance(x, basestring):
                 if x in functions:
@@ -388,11 +427,32 @@ def _match_constants(key, functions):
                 #     graph_vals["%s/%s" % (schema,i)].append(y)
                 # i += 1
 
+    #find constants from node via value_dict
+    for k, v in value_dict.items():
+        if k in key:
+            if isinstance(v, basestring):
+                if '/' not in v:
+                    if v in functions:
+                        graph_vals[k].extend(functions[v])
+                    else:
+                        logger.debug("cannot resolve %s:%s in reference %s" % (k, v, key))
+                else:
+                    graph_vals[k].append(v)
+            elif isinstance(v, (int, long)):
+                graph_vals[k].append(v)
+            elif isinstance(v, float):
+                graph_vals[k].append(float(v))
+            else:
+                for l in list(v):
+                    graph_vals[k].append(l)
+    logger.debug("graph_vals=%s" % graph_vals)
+
     return graph_vals
 
 
 def reorder_keys(graph_vals, graph_info,  key, name):
     # reorder based on value_keys
+    # FIXME: need to validate this code.
     plot = []
     if 'legends' in graph_info:
         plot.append(graph_info['legends'])
@@ -414,6 +474,7 @@ def reorder_keys(graph_vals, graph_info,  key, name):
 
 
 def load_graph_schemas():
+    # TODO: if schemas missing, then create them.
     # Get exp graph shema
     exp_schema = Schema.objects.get(
         namespace__exact=EXPERIMENT_GRAPH,
@@ -431,3 +492,179 @@ def load_graph_schemas():
 
     return (exp_schema, dset_schema, dfile_schema)
 
+
+
+@authz.dataset_access_required
+def view_dataset(request, dataset_id):
+    """Displays a Dataset and associated information.
+
+    Shows a dataset its metadata and a list of associated files with
+    the option to show metadata of each file and ways to download those files.
+    With write permission this page also allows uploading and metadata
+    editing.
+    Optionally, if set up in settings.py, datasets of a certain type can
+    override the default view.
+    Settings example:
+    DATASET_VIEWS = [("http://dataset.example/schema",
+                      "tardis.apps.custom_views_app.views.my_view_dataset"),]
+    """
+    dataset = Dataset.objects.get(id=dataset_id)
+
+    def get_datafiles_page():
+        # pagination was removed by someone in the interface but not here.
+        # need to fix.
+        pgresults = 100
+
+        paginator = Paginator(dataset.dataset_file_set.all(), pgresults)
+
+        try:
+            page = int(request.GET.get('page', '1'))
+        except ValueError:
+            page = 1
+
+        # If page request (9999) is out of range, deliver last page of results.
+
+        try:
+            return paginator.page(page)
+        except (EmptyPage, InvalidPage):
+            return paginator.page(paginator.num_pages)
+
+    upload_method = getattr(settings, "UPLOAD_METHOD", "uploadify")
+
+    # TODO: should be read from domain-specific filter plugins
+    functions = {
+        'tardis.tardis_portal.filters.getdf': [1, 3, 5 , 7],  #only works for lists
+        'tardis.tardis_portal.filters.x': [2, 4 , 6, 8],
+        'tardis.tardis_portal.filters.y': [11, 14, 15, 35],
+    }
+
+    (exp_schema, dset_schema, dfile_schema) = load_graph_schemas()
+
+    display_images = []
+
+    # TODO: check order of loops so that longests loops are not repeated
+    for graph_dset_pset in dataset.getParameterSets().filter(schema=dset_schema):
+        logger.debug("graph_dset_pset=%s" % graph_dset_pset)
+        try:
+            dset_params = DatasetParameter.objects.filter(
+                parameterset=graph_dset_pset)
+        except DatasetParameter.DoesNotExist:
+            continue
+
+        try:
+            (dset_name, value_keys, value_dict, graph_info) = \
+                _get_graph_data(dset_params)
+        except ValueError, e:
+            logger.error(e)
+            continue
+
+        plots = []
+        for m, key in enumerate(value_keys):
+            logger.debug("key=%s" % key)
+            graph_vals = defaultdict(list)
+
+            for dfile in Dataset_File.objects.filter(dataset=dataset):
+                logger.debug("dfile=%s" % dfile)
+                dset_pset = dfile.getParameterSets() \
+                    .filter(schema=dfile_schema)
+
+                for graph_dfile_pset in dset_pset:
+                    logger.debug("graph_dfile_pset=%s" % graph_dfile_pset)
+                    try:
+                        dfile_params = DatafileParameter.objects.filter(
+                            parameterset=graph_dfile_pset)
+                    except DatafileParameter.DoesNotExist:
+                        continue
+
+                    logger.debug("dset_name=%s" % dset_name)
+
+                    logger.debug("1graph_vals=%s" % graph_vals)
+                    try:
+                        graph_vals = _match_key_vals(graph_vals, dfile_params, key, dset_name, functions)
+                    except ValueError, e:
+                        logger.error(e)
+                        continue
+                    logger.debug("2graph_vals=%s" % graph_vals)
+
+                logger.debug("3graph_vals=%s" % graph_vals)
+
+            try:
+                graph_vals.update(_match_constants(key, value_dict, functions))
+            except ValueError, e:
+                logger.error(e)
+                continue
+
+            logger.debug("4graph_vals=%s" % graph_vals)
+
+            try:
+                plot = reorder_keys(graph_vals, graph_info, key, dset_name)
+            except ValueError, e:
+                logger.error(e)
+                continue
+            logger.debug("plot=%s" % plot)
+
+            plots.append(plot)
+
+        logger.debug(("plots=%s" % plots))
+        mtp = MatPlotLib()
+        plot_name = "plot"
+        pfile = mtp.graph(graph_info, dset_schema, graph_dset_pset, plot_name, plots)
+
+        if pfile:
+            # TODO: return encode rather than create Parameters as all
+            # backends should do the same thing.
+            try:
+                # FIXME: need to select on parameter set here too
+                pn = ParameterName.objects.get(schema=dset_schema, name=plot_name)
+            except ParameterName.DoesNotExist:
+                logger.error(
+                    "ParameterName is missing %s parameter" % plot_name)
+                return None
+            except MultipleObjectsReturned:
+                logger.error(
+                    "ParameterName is multiple %s parameters" % plot_name)
+                return None
+
+            logger.debug("ready to save")
+
+            try:
+                ep = DatasetParameter.objects.get(
+                    parameterset=graph_dset_pset,
+                    name=pn)
+            except DatasetParameter.DoesNotExist:
+                ep = DatasetParameter(
+                    parameterset=graph_dset_pset,
+                    name=pn)
+            except MultipleObjectsReturned:
+                logger.error("multiple hrmc dset schemas returned")
+                return None
+            ep.string_value = "%s.png" % pfile
+            ep.save()
+
+            display_images.append(ep)
+
+    # TODO: Need some sort of caching so that graphs are only recreated if data
+    # has actually changed.  Also want creation to be async process to the
+    # display of the page.
+    # FIXME: currently, reloading the page creates a brand new graph file,
+    # which could be DoS attack vector.
+
+    c = Context({
+        'dataset': dataset,
+        'datafiles': get_datafiles_page(),
+        'parametersets': dataset.getParameterSets()
+                                .exclude(schema__hidden=True),
+        'has_download_permissions':
+            authz.has_dataset_download_access(request, dataset_id),
+        'has_write_permissions':
+            authz.has_dataset_write(request, dataset_id),
+        'from_experiment':
+            get_experiment_referer(request, dataset_id),
+        'other_experiments':
+            authz.get_accessible_experiments_for_dataset(request, dataset_id),
+        'upload_method': upload_method,
+        'display_images': display_images
+    })
+    _add_protocols_and_organizations(request, None, c)
+    return HttpResponse(render_response_index(
+        request, 'hrmc_views/view_full_dataset.html', c))

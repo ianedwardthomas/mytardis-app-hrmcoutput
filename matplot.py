@@ -45,7 +45,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 MARKER_LIST = ('x', '+', 'o')
-COLOR_LIST = ('b','g','r','c','m','y','k')
+COLOR_LIST = ('b', 'g', 'r', 'c', 'm', 'y', 'k')
+
 
 class MatPlotLib(GraphBackend):
 
@@ -59,7 +60,6 @@ class MatPlotLib(GraphBackend):
         fig = matplotlib.pyplot.gcf()
         #fig.set_size_inches(15.5, 13.5)
         logger.debug("plots=%s" % plots)
-        colors = ['blue', 'red']
         ax = None
         for i, plot in enumerate(plots):
             logger.debug("plot=%s" % plot)
@@ -89,7 +89,7 @@ class MatPlotLib(GraphBackend):
                 if 'legends' in graph_info:
                     try:
                         l = graph_info['legends'][i]
-                    except IndexError,e:
+                    except IndexError, e:
                         logger.warn(e)
                         l = ""
                 else:
@@ -99,14 +99,13 @@ class MatPlotLib(GraphBackend):
                 try:
                     ax.scatter(xs, ys, color=coloriter.next(),  marker=markiter.next(), label=l)
                 except ValueError, e:
-                    # TODO: handle errors
+                    # TODO: handle errors properly
                     logger.error(e)
                     continue
                 except NameError, e:
-                    # TODO: handle errors
+                    # TODO: handle errors properly
                     logger.error(e)
                     continue
-
 
         if ax:
             if 'axes' in graph_info:
@@ -123,9 +122,10 @@ class MatPlotLib(GraphBackend):
             from uuid import uuid4 as uuid
 
             filename = str(uuid())
+            dirname = settings.METADATA_STORE_PATH
             subdir1 = filename[0:2]
             subdir2 = filename[2:4]
-            dirname = join(settings.METADATA_STORE_PATH, subdir1, subdir2)
+            dirname = join(dirname, 'metadata-cache', subdir1, subdir2)
             pfile = join(dirname, filename)
             logger.debug("pfile=%s" % pfile)
 
@@ -133,43 +133,10 @@ class MatPlotLib(GraphBackend):
                 makedirs(dirname)
 
             matplotlib.pyplot.savefig("%s.png" % pfile, dpi=100)
-
-#            with open("%s.png" % pfile) as pf:
-#                read = pf.read()
-#                encoded = base64.b64encode(read)
             matplotlib.pyplot.close()
 
-            # TODO: return encode rather than create Parameters as all
-            # backends should do the same thing.
-            try:
-                # FIXME: need to select on parameter set here too
-                pn = ParameterName.objects.get(schema=schema, name=plot_name)
-            except ParameterName.DoesNotExist:
-                logger.error(
-                    "ParameterName is missing %s parameter" % plot_name)
-                return None
-            except MultipleObjectsReturned:
-                logger.error(
-                    "ParameterName is multiple %s parameters" % plot_name)
-                return None
+            return pfile
 
-            logger.debug("ready to save")
-
-            try:
-                ep = ExperimentParameter.objects.get(
-                    parameterset=parameter_set,
-                    name=pn)
-            except ExperimentParameter.DoesNotExist:
-                ep = ExperimentParameter(
-                    parameterset=parameter_set,
-                    name=pn)
-            except MultipleObjectsReturned:
-                logger.error("multiple hrmc experiment schemas returned")
-                return None
-            ep.string_value = "%s.png" % pfile
-            ep.save()
-
-            display_image = ep
         else:
             logger.debug("one or more files unavailable")
             return None
