@@ -96,6 +96,8 @@ In ``/opt/mytardis/current/tardis/settings.py`` add following::
     INSTALLED_APPS += ("tardis.apps.hrmc_views",)
     EXPERIMENT_VIEWS = [("http://rmit.edu.au/schemas/expgraph",
             "tardis.apps.hrmc_views.graphit.view_experiment")]
+    DATASET_VIEWS = [("http://rmit.edu.au/schemas/dsetgraph",
+            "tardis.apps.hrmc_views.graphit.view_dataset")]
 
 Restart MyTardis
 
