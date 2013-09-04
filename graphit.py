@@ -26,6 +26,8 @@ from tardis.tardis_portal.models import ExperimentParameterSet
 from tardis.tardis_portal.models import (ParameterName, DatasetParameter,
     DatafileParameter)
 from tardis.tardis_portal.models import ExperimentParameter
+# FIXME: can Parameter be exported via models __init__ ?
+from django.core.exceptions import ObjectDoesNotExist
 from tardis.tardis_portal.models import Dataset_File
 from tardis.tardis_portal.views import SearchQueryString
 from tardis.tardis_portal.views import _add_protocols_and_organizations
@@ -35,6 +37,9 @@ from .matplot import MatPlotLib
 EXPERIMENT_GRAPH = "http://rmit.edu.au/schemas/expgraph"
 DATASET_GRAPH = "http://rmit.edu.au/schemas/dsetgraph"
 DATAFILE_GRAPH = "http://rmit.edu.au/schemas/dfilegraph"
+CHECKSUM_NAME = "checksum"
+PLOT_NAME = "plot"
+
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +210,42 @@ def view_experiment(request, experiment_id,
 
     display_images = []
 
+    # precompute and reuse
+    dsets = list(Dataset.objects.filter(experiments=experiment))
+    #logger.debug("dsets=%s" % dsets)
+    #logger.debug("foo1")
+    dset_pset_info = {}
+    for dset in dsets:
+        #logger.debug("dset=%s" % dset)
+        #logger.debug("dset.id=%s" % dset.id)
+        dset_pset = dset.getParameterSets() \
+                    .filter(schema=dset_schema)
+        #logger.debug("dset_pset=%s" % dset_pset)
+
+        #if len(dset_pset):
+        dset_pset_info[dset.id] = [x.id for x in dset_pset]
+    #logger.debug("foo2")
+    logger.debug("dset_pset_info=%s" % dset_pset_info)
+
+    dset_p_info = {}
+    for d in dset_pset_info.values():
+        #logger.debug("d=%s" % d)
+        for p in d:
+            #logger.debug("p=%s" % p)
+            try:
+                dset_params = DatasetParameter.objects.filter(
+                                parameterset__id=p)
+            except DatasetParameter.DoesNotExist:
+                pass
+
+            #logger.debug("dset_params=%s" % dset_params)
+            #logger.debug("p.id=%s" % p.id)
+            dset_p_info[p] = dset_params
+
+    logger.debug("dset_p_info=%s" % dset_p_info)
+    logger.debug("dsets=%s" % len(dsets))
+
+
     # TODO: check order of loops so that longests loops are not repeated
     for graph_exp_pset in experiment.getParameterSets().filter(schema=exp_schema):
         logger.debug("graph_exp_pset=%s" % graph_exp_pset)
@@ -215,80 +256,183 @@ def view_experiment(request, experiment_id,
             continue
 
         try:
-            (exp_name, value_keys, value_dict, graph_info) = \
+            (exp_name, value_keys, value_dict, graph_info, checksum) = \
                 _get_graph_data(exp_params)
         except ValueError, e:
             logger.error(e)
             continue
+        except ExperimentParameter.DoesNotExist, e:
+            logger.error(e)
+            continue
 
-        plots = []
-        for m, key in enumerate(value_keys):
-            logger.debug("key=%s" % key)
-            graph_vals = defaultdict(list)
-
-            for dset in Dataset.objects.filter(experiments=experiment):
-                logger.debug("dset=%s" % dset)
-                dset_pset = dset.getParameterSets() \
-                    .filter(schema=dset_schema)
-
-                for graph_dset_pset in dset_pset:
-                    logger.debug("graph_dset_pset=%s" % graph_dset_pset)
-                    try:
-                        dset_params = DatasetParameter.objects.filter(
-                            parameterset=graph_dset_pset)
-                    except DatasetParameter.DoesNotExist:
-                        continue
-
-                    logger.debug("exp_name=%s" % exp_name)
-
-                    logger.debug("graph_vals=%s" % graph_vals)
-                    try:
-                        graph_vals = _match_key_vals(graph_vals, dset_params, key, exp_name, functions)
-                    except ValueError, e:
-                        logger.error(e)
-                        continue
-                    logger.debug("graph_vals=%s" % graph_vals)
-
-                logger.debug("graph_vals=%s" % graph_vals)
-
+        logger.debug("dsets=%s" % len(dsets))
+        logger.debug("checksum=%s" % checksum)
+        if len(dsets) == checksum:
+            logger.debug("already computed")
             try:
-                graph_vals.update(_match_constants(key, value_dict,  functions))
-            except ValueError, e:
-                logger.error(e)
+                checksum_pn = ParameterName.objects.get(schema=exp_schema, name=CHECKSUM_NAME)
+            except ParameterName.DoesNotExist:
+                logger.error(
+                    "ParameterName is missing %s parameter" % PLOT_NAME)
+                continue
+            except MultipleObjectsReturned:
+                logger.error(
+                    "ParameterName is multiple %s parameters" % PLOT_NAME)
                 continue
 
-            logger.debug("graph_vals=%s" % graph_vals)
-
             try:
-                plot = reorder_keys(graph_vals, graph_info, key, exp_name)
+                ep = ExperimentParameter.objects.get(
+                    parameterset=graph_exp_pset,
+                    name=checksum_pn)
+            except ExperimentParameter.DoesNotExist:
+                # if cannot load parameter, then recalculate anyway
+                pass
+            except MultipleObjectsReturned:
+                logger.error("multiple hrmc experiment schemas returned")
+                continue
+            else:
+                try:
+                    pn = ParameterName.objects.get(schema=exp_schema, name=PLOT_NAME)
+                except ParameterName.DoesNotExist:
+                    logger.error(
+                        "ParameterName is missing %s parameter" % PLOT_NAME)
+                    continue
+                except MultipleObjectsReturned:
+                    logger.error(
+                        "ParameterName is multiple %s parameters" % PLOT_NAME)
+                    continue
+
+                try:
+                    ep = ExperimentParameter.objects.get(
+                        parameterset=graph_exp_pset,
+                        name=pn)
+                except ExperimentParameter.DoesNotExist:
+                    # if cannot load param, then continue anyway
+                    pass
+                except MultipleObjectsReturned:
+                    logger.error("multiple hrmc experiment schemas returned")
+                    continue
+                else:
+                    display_images.append(ep)
+                    continue
+        else:
+            logger.debug("new plot generated")
+
+        plots = []
+        logger.debug("dset_p_info=%s" % dset_p_info)
+
+        graph_val_dict = defaultdict(dict)
+
+        for dset in dsets:
+            logger.debug("dset=%s" % dset)
+
+            for m, key in enumerate(value_keys):
+                logger.debug("key=%s" % key)
+                graph_vals = graph_val_dict[m]
+                #graph_vals = defaultdict(list)
+
+                #for dset in Dataset.objects.filter(experiments=experiment):
+                #logger.debug("dset=%s" % dset)
+                #dset_pset = dset.getParameterSets() \
+                #    .filter(schema=dset_schema)
+
+                #logger.debug("dset_pset_info=%s" % dset_pset_info)
+                for graph_dset_pset in dset_pset_info[dset.id]:
+                    #for graph_dset_pset in dset_pset:
+                        logger.debug("graph_dset_pset=%s" % graph_dset_pset)
+                        # try:
+                        #     dset_params = DatasetParameter.objects.filter(
+                        #         parameterset=graph_dset_pset)
+                        # except DatasetParameter.DoesNotExist:
+                        #     continue
+
+
+                        dset_params = []
+
+                        dset_params = dset_p_info[graph_dset_pset]
+
+                        # for d in graph_dset_pset:
+                        #     logger.debug("d=%s" % d)
+                        #     logger.debug("d.id=%s" % d.id)
+                        #     dset_params.append(dset_p_info[d.id])
+
+                        #logger.debug("dset_params=%s" % dset_params)
+                        #logger.debug("exp_name=%s" % exp_name)
+
+                        #logger.debug("graph_vals=%s" % graph_vals)
+                        try:
+                            graph_vals = _match_key_vals(graph_vals, dset_params, value_keys[m], exp_name, functions)
+                        except ValueError, e:
+                            logger.error(e)
+                            continue
+                        #logger.debug("graph_vals=%s" % graph_vals)
+
+                    #logger.debug("graph_vals=%s" % graph_vals)
+
+                try:
+                    graph_vals.update(_match_constants(value_keys[m], value_dict,  functions))
+                except ValueError, e:
+                    logger.error(e)
+                    continue
+
+            graph_val_dict[m] = graph_vals
+
+        logger.debug("graph_val_dict=%s" % graph_val_dict)
+        plots = []
+        for k in graph_val_dict:
+            try:
+                plot = reorder_keys(graph_val_dict[k], graph_info, value_keys[k], exp_name)
             except ValueError, e:
                 logger.error(e)
                 continue
             logger.debug("plot=%s" % plot)
-
             plots.append(plot)
 
         logger.debug(("plots=%s" % plots))
         mtp = MatPlotLib()
-        plot_name = "plot"
-        pfile = mtp.graph(graph_info, exp_schema, graph_exp_pset, plot_name, plots)
+        pfile = mtp.graph(graph_info, exp_schema, graph_exp_pset, PLOT_NAME, plots)
 
         if pfile:
             # TODO: return encode rather than create Parameters as all
             # backends should do the same thing.
             try:
                 # FIXME: need to select on parameter set here too
-                pn = ParameterName.objects.get(schema=exp_schema, name=plot_name)
+                pn = ParameterName.objects.get(schema=exp_schema, name=PLOT_NAME)
             except ParameterName.DoesNotExist:
                 logger.error(
-                    "ParameterName is missing %s parameter" % plot_name)
+                    "ParameterName is missing %s parameter" % PLOT_NAME)
                 return None
             except MultipleObjectsReturned:
                 logger.error(
-                    "ParameterName is multiple %s parameters" % plot_name)
+                    "ParameterName is multiple %s parameters" % PLOT_NAME)
                 return None
 
             logger.debug("ready to save")
+
+            try:
+                checksum_pn = ParameterName.objects.get(schema=exp_schema, name=CHECKSUM_NAME)
+            except ParameterName.DoesNotExist:
+                logger.error(
+                    "ParameterName is missing %s parameter" % PLOT_NAME)
+                return None
+            except MultipleObjectsReturned:
+                logger.error(
+                    "ParameterName is multiple %s parameters" % PLOT_NAME)
+                return None
+
+            try:
+                ep = ExperimentParameter.objects.get(
+                    parameterset=graph_exp_pset,
+                    name=checksum_pn)
+            except ExperimentParameter.DoesNotExist:
+                ep = ExperimentParameter(
+                    parameterset=graph_exp_pset,
+                    name=checksum_pn)
+            except MultipleObjectsReturned:
+                logger.error("multiple hrmc experiment schemas returned")
+                return None
+            ep.numerical_value = len(dsets)
+            ep.save()
 
             try:
                 ep = ExperimentParameter.objects.get(
@@ -301,7 +445,7 @@ def view_experiment(request, experiment_id,
             except MultipleObjectsReturned:
                 logger.error("multiple hrmc experiment schemas returned")
                 return None
-            ep.string_value = "%s.png" % pfile
+            ep.string_value = pfile
             ep.save()
 
             display_images.append(ep)
@@ -340,32 +484,45 @@ def _get_graph_data(params):
     # this data must be validated before accepted.  json loads, is
     # probably in sufficient, and need to check right formats for values etc.
 
+    #logger.debug("params=%s" % params)
+    logger.debug("loading name")
     name = params.get(name__name="name").get()
     logger.debug("name=%s" % name)
 
     v_d = str(params.get(name__name="value_dict").get())
+    logger.debug("loading value_dict %s" % v_d)
     value_dict = json.loads(v_d)
     logger.debug("value_dict=%s" % value_dict)
 
-    logger.debug("value_dict=%s" % value_dict)
+    logger.debug("loading value_keys")
     value_keys = json.loads(str(params.get(name__name="value_keys").get()))
     logger.debug("value_keys=%s" % value_keys)
 
+    logger.debug("loading graph_info")
     graph_info = json.loads(str(params.get(name__name="graph_info").get()))
     logger.debug("graph_info=%s" % graph_info)
 
-    return (name, value_keys, value_dict, graph_info)
+    logger.debug("loading checksum")
+    try:
+        checksum = json.loads(str(params.get(name__name="checksum").get()))
+    except ObjectDoesNotExist:
+        checksum = 0
+    logger.debug("checksum=%s" % checksum)
+
+    logger.debug("finished loading")
+    return (name, value_keys, value_dict, graph_info, checksum)
 
 
 def _match_key_vals(graph_vals, params, key, parent_name,  functions):
 
-    logger.debug("params=%s" % params)
-    logger.debug("key=%s" % key)
+    #logger.debug("params=%s" % params)
+    #logger.debug("key=%s" % key)
+    #logger.debug("graph_vals=%s" % graph_vals)
 
-    (name, value_keys, value_dict, graph_info) = \
+    (name, value_keys, value_dict, graph_info, checksum) = \
         _get_graph_data(params)
 
-    logger.debug("dset_name=%s" % name)
+    #logger.debug("dset_name=%s" % name)
     logger.debug("value_dict=%s" % value_dict)
 
     for k, v in value_dict.items():
@@ -373,7 +530,7 @@ def _match_key_vals(graph_vals, params, key, parent_name,  functions):
         if str(k) in key:
 
             id = str(k).split('/')[0]
-            logger.debug("id=%s" % id)
+            #logger.debug("id=%s" % id)
             if id != name:
                 logger.debug("non match %s to %s" % (id, name))
                 continue
@@ -381,17 +538,17 @@ def _match_key_vals(graph_vals, params, key, parent_name,  functions):
             if isinstance(v, basestring):
                 logger.debug(v)
                 if v in functions:
-                    graph_vals[k].extend(
+                    graph_vals.setdefault(k,[]).extend(
                         functions[v])
                 else:
-                    graph_vals[k].append(v)
+                    graph_vals.setdefault(k,[]).append(v)
             elif isinstance(v, (int, long)):
-                graph_vals[k].append(v)
+                graph_vals.setdefault(k,[]).append(v)
             elif isinstance(v, float):
-                graph_vals[k].append(float(v))
+                graph_vals.setdefault(k,[]).append(float(v))
             else:
                 for l in list(v):
-                    graph_vals[k].append(l)
+                    graph_vals.setdefault(k,[]).append(l)
         else:
             logger.warn("%s not in %s" % (k, key))
             pass
@@ -406,9 +563,9 @@ def _match_constants(key, value_dict, functions):
 
     #find constants from node via value_keys
 
-    logger.debug("key=%s" % key)
+    #logger.debug("key=%s" % key)
     for x in key:
-        logger.debug("x=%s" % x)
+        #logger.debug("x=%s" % x)
         if '/' not in x:
             if isinstance(x, basestring):
                 if x in functions:
@@ -426,7 +583,9 @@ def _match_constants(key, value_dict, functions):
                 # for y in list(x):
                 #     graph_vals["%s/%s" % (schema,i)].append(y)
                 # i += 1
+    logger.debug("find constants")
 
+    #logger.debug("value_dict=%s" % value_dict)
     #find constants from node via value_dict
     for k, v in value_dict.items():
         if k in key:
@@ -445,7 +604,7 @@ def _match_constants(key, value_dict, functions):
             else:
                 for l in list(v):
                     graph_vals[k].append(l)
-    logger.debug("graph_vals=%s" % graph_vals)
+    #logger.debug("graph_vals=%s" % graph_vals)
 
     return graph_vals
 
@@ -461,11 +620,11 @@ def reorder_keys(graph_vals, graph_info,  key, name):
     i = 0
     for k in key:
         if isinstance(k, basestring):
-            plot.append((k, graph_vals[k]))
+            plot.append((k, graph_vals.get(k,[])))
         elif isinstance(k, (int, long)):
-            plot.append((k, graph_vals[k]))
+            plot.append((k, graph_vals.get(k,[])))
         elif isinstance(k, float):
-            plot.append((k, graph_vals[k]))
+            plot.append((k, graph_vals.get(k,[])))
         else:
             key = "%s/%s" % (name, i)
             plot.append((key, graph_vals[key]))
@@ -533,7 +692,7 @@ def view_dataset(request, dataset_id):
 
     # TODO: should be read from domain-specific filter plugins
     functions = {
-        'tardis.tardis_portal.filters.getdf': [1, 3, 5 , 7],  #only works for lists
+        'tardis.tardis_portal.filters.getdf': [1, 3, 5, 7],  # only works for lists
         'tardis.tardis_portal.filters.x': [2, 4 , 6, 8],
         'tardis.tardis_portal.filters.y': [11, 14, 15, 35],
     }
@@ -552,7 +711,7 @@ def view_dataset(request, dataset_id):
             continue
 
         try:
-            (dset_name, value_keys, value_dict, graph_info) = \
+            (dset_name, value_keys, value_dict, graph_info, checksum) = \
                 _get_graph_data(dset_params)
         except ValueError, e:
             logger.error(e)
@@ -607,22 +766,21 @@ def view_dataset(request, dataset_id):
 
         logger.debug(("plots=%s" % plots))
         mtp = MatPlotLib()
-        plot_name = "plot"
-        pfile = mtp.graph(graph_info, dset_schema, graph_dset_pset, plot_name, plots)
+        pfile = mtp.graph(graph_info, dset_schema, graph_dset_pset, PLOT_NAME, plots)
 
         if pfile:
             # TODO: return encode rather than create Parameters as all
             # backends should do the same thing.
             try:
                 # FIXME: need to select on parameter set here too
-                pn = ParameterName.objects.get(schema=dset_schema, name=plot_name)
+                pn = ParameterName.objects.get(schema=dset_schema, name=PLOT_NAME)
             except ParameterName.DoesNotExist:
                 logger.error(
-                    "ParameterName is missing %s parameter" % plot_name)
+                    "ParameterName is missing %s parameter" % PLOT_NAME)
                 return None
             except MultipleObjectsReturned:
                 logger.error(
-                    "ParameterName is multiple %s parameters" % plot_name)
+                    "ParameterName is multiple %s parameters" % PLOT_NAME)
                 return None
 
             logger.debug("ready to save")
@@ -638,7 +796,7 @@ def view_dataset(request, dataset_id):
             except MultipleObjectsReturned:
                 logger.error("multiple hrmc dset schemas returned")
                 return None
-            ep.string_value = "%s.png" % pfile
+            ep.string_value = pfile
             ep.save()
 
             display_images.append(ep)

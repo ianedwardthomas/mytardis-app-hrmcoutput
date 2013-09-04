@@ -60,6 +60,10 @@ class MatPlotLib(GraphBackend):
         fig = matplotlib.pyplot.gcf()
         #fig.set_size_inches(15.5, 13.5)
         logger.debug("plots=%s" % plots)
+        if 'type' in graph_info:
+            graph_type = graph_info['type']
+        else:
+            graph_type = "scatter"
         ax = None
         for i, plot in enumerate(plots):
             logger.debug("plot=%s" % plot)
@@ -95,9 +99,18 @@ class MatPlotLib(GraphBackend):
                 else:
                     l = ""
                 logger.debug("legend=%s" % l)
+
+                point_col = coloriter.next()
                 # Create a subplot.
                 try:
-                    ax.scatter(xs, ys, color=coloriter.next(),  marker=markiter.next(), label=l)
+                    if graph_type == "line":
+                        matplotlib.pyplot.plot(xs, ys, color=point_col,
+                            markeredgecolor=point_col, marker=markiter.next(),
+                            label=l)
+                    else:
+                        ax.scatter(xs, ys, color=point_col,
+                            marker=markiter.next(), label=l)
+
                 except ValueError, e:
                     # TODO: handle errors properly
                     logger.error(e)
@@ -106,6 +119,9 @@ class MatPlotLib(GraphBackend):
                     # TODO: handle errors properly
                     logger.error(e)
                     continue
+
+
+
 
         if ax:
             if 'axes' in graph_info:
@@ -135,7 +151,7 @@ class MatPlotLib(GraphBackend):
             matplotlib.pyplot.savefig("%s.png" % pfile, dpi=100)
             matplotlib.pyplot.close()
 
-            return pfile
+            return "%s.png" % pfile
 
         else:
             logger.debug("one or more files unavailable")
