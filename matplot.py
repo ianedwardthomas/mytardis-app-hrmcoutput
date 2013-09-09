@@ -89,7 +89,7 @@ class MatPlotLib(GraphBackend):
 
             if vals:
                 logger.debug("vals=%s" % vals)
-                xs, ys = vals
+                #xs, ys = vals
                 if 'legends' in graph_info:
                     try:
                         l = graph_info['legends'][i]
@@ -104,11 +104,11 @@ class MatPlotLib(GraphBackend):
                 # Create a subplot.
                 try:
                     if graph_type == "line":
-                        matplotlib.pyplot.plot(xs, ys, color=point_col,
+                        matplotlib.pyplot.plot(*vals, color=point_col,
                             markeredgecolor=point_col, marker=markiter.next(),
                             label=l)
                     else:
-                        ax.scatter(xs, ys, color=point_col,
+                        ax.scatter(*vals, color=point_col,
                             marker=markiter.next(), label=l)
 
                 except ValueError, e:
@@ -119,9 +119,6 @@ class MatPlotLib(GraphBackend):
                     # TODO: handle errors properly
                     logger.error(e)
                     continue
-
-
-
 
         if ax:
             if 'axes' in graph_info:
