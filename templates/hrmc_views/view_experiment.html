@@ -1,5 +1,7 @@
 {% extends "tardis_portal/view_experiment.html" %}
 {% load url from future %}
+{% load static from staticfiles %}
+
 
 {% block style %}
 {{ block.super }}
@@ -14,38 +16,24 @@
     text-align: center;
 }
 </style>
+
 {% endblock style %}
+
 {% block experiment_content_preview %}
-<div class="row-fluid" style="margin-bottom: 20px;">
-  <h3></h3>
-  <div class="info-box">
-    {% if display_images|length > 0 %}
-    <div class="display_images">
-      {% for datafile in display_images %}
-    {% url 'tardis.tardis_portal.iiif.download_image' datafile_id=datafile.id region='full' size='!350,350' rotation=0 quality='native' format='jpg' as thumbnail %}
-        {% url 'tardis.tardis_portal.iiif.download_image' datafile_id=datafile.id region='full' size='full' rotation=0 quality='native' format='png' as image %}
-    {% cycle "<div class='row-fluid'>" "" %}
-    <div class="span6">
-      {{datafile.get}}
-    </div>
-      {% if forloop.last %}
-        </div>
-      {% else %}
-        {% cycle "" "</div>" %}
-      {% endif %}
-        {% endfor %}
-    </div>
-    {% else %}
-      <div class="alert">No previews available</div>
-    {% endif %}
+<div id="graphs">
+  <div class="row-fluid" style="margin-bottom: 20px;">
+    <div class="info-box">
+    <p>Please wait... <img src="{% static 'images/ajax-loader.gif'%}" alt=
+      "loading" /></p>
   </div>
+</div>
 </div>
 {% endblock %}
 
+{% block documentready %}
+$('#graphs').load('{% url 'tardis.apps.hrmc_views.views.get_graph' experiment.id %}');
+{% endblock documentready %}
+
 {% block finalscript %}
 {{ block.super }}
-<script type="text/javascript">
-$(document).ready(function(){
-});
-</script>
 {% endblock finalscript %}
