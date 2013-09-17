@@ -210,6 +210,35 @@ def view_experiment(request, experiment_id,
 
     display_images = []
 
+
+
+
+    c['display_images'] = []
+
+
+    _add_protocols_and_organizations(request, experiment, c)
+
+    import sys
+    appnames = []
+    appurls = []
+    for app in getTardisApps():
+        try:
+            appnames.append(sys.modules['%s.%s.settings'
+                                        % (settings.TARDIS_APP_ROOT, app)].NAME)
+            appurls.append('%s.%s.views.index' % (settings.TARDIS_APP_ROOT,
+                                                  app))
+        except:
+            logger.debug(("No tab for %s" % app))
+            pass
+
+    c['apps'] = zip(appurls, appnames)
+
+    return HttpResponse(render_response_index(request, template_name, c))
+
+
+
+
+
     # precompute and reuse
     dsets = list(Dataset.objects.filter(experiments=experiment))
     #logger.debug("dsets=%s" % dsets)
@@ -317,6 +346,7 @@ def view_experiment(request, experiment_id,
                     continue
         else:
             logger.debug("new plot generated")
+            # TODO: clean up old cached version of the file
 
         plots = []
         logger.debug("dset_p_info=%s" % dset_p_info)
@@ -456,7 +486,9 @@ def view_experiment(request, experiment_id,
     # FIXME: currently, reloading the page creates a brand new graph file,
     # which could be DoS attack vector.
 
-    c['display_images'] = display_images
+    #c['display_images'] = display_images
+    c['display_images'] = []
+
 
     _add_protocols_and_organizations(request, experiment, c)
 
@@ -522,6 +554,7 @@ def _match_key_vals(graph_vals, params, key, parent_name,  functions):
     (name, value_keys, value_dict, graph_info, checksum) = \
         _get_graph_data(params)
 
+    logger.debug("key=%s" % key)
     #logger.debug("dset_name=%s" % name)
     logger.debug("value_dict=%s" % value_dict)
 

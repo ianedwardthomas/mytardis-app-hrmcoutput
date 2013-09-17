@@ -50,6 +50,7 @@ from tardis.tardis_portal.views import _add_protocols_and_organizations
 
 from . import graphit
 from .matplot import MatPlotLib
+from .flot import Flot
 
 # import and configure matplotlib library
 try:
@@ -744,7 +745,7 @@ PLOT_NAME = "plot"
 
 
 def get_graph(request, experiment_id):
-    display_images = []
+    display_html = []
 
     # TODO: should be read from domain-specific filter plugins
     functions = {
@@ -865,7 +866,10 @@ def get_graph(request, experiment_id):
                     logger.error("multiple hrmc experiment schemas returned")
                     continue
                 else:
-                    display_images.append(ep)
+                    res = ''
+                    with open(ep.string_value, 'r') as f:
+                        res += f.read()
+                    display_html.append(res)
                     continue
         else:
             logger.debug("new plot generated")
@@ -941,9 +945,13 @@ def get_graph(request, experiment_id):
             plots.append(plot)
 
         logger.debug(("plots=%s" % plots))
-        mtp = MatPlotLib()
-        pfile = mtp.graph(graph_info, exp_schema, graph_exp_pset, PLOT_NAME, plots)
+        #mtp = MatPlotLib()
+        #pfile = mtp.graph(graph_info, exp_schema, graph_exp_pset, PLOT_NAME, plots)
 
+        g = Flot()
+        pfile = g.graph(graph_info, exp_schema, graph_exp_pset, PLOT_NAME, plots)
+
+        logger.debug("pfile=%s" % pfile)
         if pfile:
             # TODO: return encode rather than create Parameters as all
             # backends should do the same thing.
@@ -1000,10 +1008,12 @@ def get_graph(request, experiment_id):
             ep.string_value = pfile
             ep.save()
 
-            display_images.append(ep)
+            res = ''
+            with open(pfile, 'r') as f:
+                res += f.read()
+            display_html.append(res)
 
-
-    c['display_images'] = display_images
+    c['display_html'] = display_html
     return HttpResponse(render_response_index(request, "hrmc_views/graph_view.html", c))
 
 

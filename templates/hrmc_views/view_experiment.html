@@ -2,22 +2,13 @@
 {% load url from future %}
 {% load static from staticfiles %}
 
-
-{% block style %}
+{% block js_libraries %}
 {{ block.super }}
-<style type="text/css">
-.display_images {
-    margin: 0 auto
-}
-.display_images div.row-fluid {
-    margin-bottom: 10px;
-}
-.display_images h4 {
-    text-align: center;
-}
-</style>
+<script type="text/javascript" src="{% static 'js/jquery.flot.js' %}"></script>
+<script type="text/javascript" src="{% static 'js/jquery.flot.selection.js' %}"></script>
+<script language="javascript" type="text/javascript" src="{% static 'js/jquery.flot.canvas.js' %}"></script>
+{% endblock js_libraries %}
 
-{% endblock style %}
 
 {% block experiment_content_preview %}
 <div id="graphs">

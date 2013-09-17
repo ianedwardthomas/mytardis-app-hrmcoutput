@@ -142,10 +142,14 @@ class MatPlotLib(GraphBackend):
             pfile = join(dirname, filename)
             logger.debug("pfile=%s" % pfile)
 
-            if not exists(dirname):
-                makedirs(dirname)
-
-            matplotlib.pyplot.savefig("%s.png" % pfile, dpi=100)
+            try:
+                if not exists(dirname):
+                    makedirs(dirname)
+                matplotlib.pyplot.savefig("%s.png" % pfile, dpi=100)
+            except IOError, e:
+                logger.error(e)
+                matplotlib.pyplot.close()
+                return None
             matplotlib.pyplot.close()
 
             return "%s.png" % pfile

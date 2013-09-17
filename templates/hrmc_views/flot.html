@@ -1,0 +1,142 @@
+
+<script type="text/javascript">
+
+  $(function() {
+
+
+    var data = [
+    {% for label,plot in plots %}
+        {
+        label: "{{label}}",
+        data: {{plot}}
+        },
+    {% endfor %}
+    ];
+
+    var options = {
+      canvas: true,
+      series: {
+        lines: {
+          show: false
+        },
+        points: {
+          show: true,
+          fill: true
+        }
+      },
+      legend: {
+        noColumns: 2
+      },
+      xaxis: {
+        tickFormatter: function(val, axis) { return val < axis.max ? val.toFixed({{xaxisprecision}}) : val.toFixed({{xaxisprecision}}).concat(" {{xaxislabel}}");},
+        autoscaleMargin: 0.05,
+        tickDecimals: {{xaxisprecision}}
+      },
+      yaxis: {
+        autoscaleMargin: 0.02,
+        tickDecimals: {{yaxisprecision}}
+      },
+      selection: {
+        mode: "xy"
+      },
+      grid: {
+        hoverable: true
+      }
+    };
+
+
+    var placeholder = $("#placeholder{{id}}");
+
+    placeholder.bind("plotselected", function (event, ranges) {
+
+      $("#selection{{id}}").text(ranges.xaxis.from.toFixed(1) + ", " + ranges.yaxis.to.toFixed(1) + " to " + ranges.xaxis.to.toFixed(1) + ", " + ranges.yaxis.from.toFixed(1));
+
+      var zoom = $("#zoom{{id}}").attr("checked");
+
+      if (zoom) {
+        plot = $.plot(placeholder, data, $.extend(true, {}, options, {
+          xaxis: {
+            min: ranges.xaxis.from,
+            max: ranges.xaxis.to
+          },
+          yaxis: {
+            min: ranges.yaxis.from,
+            max: ranges.yaxis.to
+          }
+        }));
+      }
+    });
+
+    function showTooltip(x, y, contents) {
+        $("<div id='tooltip{{id}}'>" + contents + "</div>").css({
+            position: "absolute",
+            display: "none",
+            top: y + 5,
+            left: x + 5,
+            border: "1px solid #fdd",
+            padding: "2px",
+            "background-color": "#fee",
+            opacity: 0.80
+        }).appendTo("body").fadeIn(200);
+    }
+
+    var previousPoint = null;
+    $("#placeholder{{id}}").bind("plothover", function (event, pos, item) {
+
+        if ($("#enablePosition{{id}}:checked").length > 0) {
+            var str = "(" + pos.x.toFixed(2) + ", " + pos.y.toFixed(2) + ")";
+            $("#hoverdata{{id}}").text(str);
+        }
+
+        if ($("#enableTooltip{{id}}:checked").length > 0) {
+            if (item) {
+                if (previousPoint != item.dataIndex) {
+
+                    previousPoint = item.dataIndex;
+
+                    $("#tooltip{{id}}").remove();
+                    var x = item.datapoint[0].toFixed(2),
+                    y = item.datapoint[1].toFixed(2);
+
+                    showTooltip(item.pageX, item.pageY,
+                        item.series.label + " of " + x + " = " + y);
+                }
+            } else {
+                $("#tooltip{{id}}").remove();
+                previousPoint = null;
+            }
+        }
+    });
+
+    placeholder.bind("plotunselected", function (event) {
+      $("#selection{{id}}").text("");
+    });
+
+    var plot = $.plot(placeholder, data, options);
+
+    $("#clearSelection{{id}}").click(function () {
+      plot.clearSelection();
+    });
+
+    $("#setSelection{{id}}").click(function () {
+      plot = $.plot(placeholder, data, options)
+      plot.setupGrid();
+      plot.draw()
+    });
+
+    // Add the Flot version string to the footer
+
+    //$("#footer").prepend("Flot " + $.plot.version + " &ndash; ");
+  });
+  </script>
+
+  <div class="demo-container{{id}}">
+    <p class="text-left">{{yaxislabel}}</p>
+  <div id="placeholder{{id}}" style="width:800px;height:300px" class="demo-placeholder{{id}}" ></div>
+</div>
+  <p>You selected: <span id="selection{{id}}"></span></p>
+    <button class="btn" id="clearSelection{{id}}">Clear selection</button>
+    <button class="btn" id="setSelection{{id}}">Reset Zoom</button>
+    <label><input id="enableTooltip{{id}}" type="checkbox" checked="yes"></input>Enable tooltip</label><label><input id="zoom{{id}}" type="checkbox" checked="yes"></input>Zoom to selection.</label>
+    <br>
+
