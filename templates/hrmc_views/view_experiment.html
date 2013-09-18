@@ -2,19 +2,18 @@
 {% load url from future %}
 {% load static from staticfiles %}
 
-{% block js_libraries %}
+{% block script %}
 {{ block.super }}
 <script type="text/javascript" src="{% static 'js/jquery.flot.js' %}"></script>
 <script type="text/javascript" src="{% static 'js/jquery.flot.selection.js' %}"></script>
-<script language="javascript" type="text/javascript" src="{% static 'js/jquery.flot.canvas.js' %}"></script>
-{% endblock js_libraries %}
-
+<script type="text/javascript" src="{% static 'js/jquery.flot.resize.js' %}"></script>
+{% endblock script %}
 
 {% block experiment_content_preview %}
 <div id="graphs">
   <div class="row-fluid" style="margin-bottom: 20px;">
     <div class="info-box">
-    <p>Please wait... <img src="{% static 'images/ajax-loader.gif'%}" alt=
+    <p>Please wait.... <img src="{% static 'images/ajax-loader.gif'%}" alt=
       "loading" /></p>
   </div>
 </div>

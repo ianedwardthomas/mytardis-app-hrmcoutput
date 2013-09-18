@@ -14,7 +14,6 @@
     ];
 
     var options = {
-      canvas: true,
       series: {
         lines: {
           show: false
@@ -130,9 +129,9 @@
   });
   </script>
 
-  <div class="demo-container{{id}}">
+  <div class="demo-container{{id}}" >
     <p class="text-left">{{yaxislabel}}</p>
-  <div id="placeholder{{id}}" style="width:800px;height:300px" class="demo-placeholder{{id}}" ></div>
+  <div id="placeholder{{id}}" class="demo-placeholder{{id}}" style="width:100%;height:300px"></div>
 </div>
   <p>You selected: <span id="selection{{id}}"></span></p>
     <button class="btn" id="clearSelection{{id}}">Clear selection</button>
