@@ -7,6 +7,15 @@
     var data = [
     {% for label,plot in plots %}
         {
+            {% if graph_type == "scatter" %}
+            points: {
+              show: true
+            },
+            {% else %}
+            lines: {
+                show: true
+            },
+            {% endif %}
         label: "{{label}}",
         data: {{plot}}
         },
@@ -14,14 +23,8 @@
     ];
 
     var options = {
-      series: {
-        lines: {
-          show: false
-        },
-        points: {
-          show: true,
-          fill: true
-        }
+        series: {
+
       },
       legend: {
         noColumns: 2
@@ -130,6 +133,7 @@
   </script>
 
   <div class="demo-container{{id}}" >
+    <h3> {{title}} </h3>
     <p class="text-left">{{yaxislabel}}</p>
   <div id="placeholder{{id}}" class="demo-placeholder{{id}}" style="width:100%;height:300px"></div>
 </div>

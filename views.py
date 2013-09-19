@@ -48,6 +48,10 @@ from tardis.tardis_portal.models import Dataset_File
 from tardis.tardis_portal.views import SearchQueryString
 from tardis.tardis_portal.views import _add_protocols_and_organizations
 
+from django.template import Context, Template
+from django.template.loader import get_template
+
+
 from . import graphit
 from .matplot import MatPlotLib
 from .flot import Flot
@@ -798,9 +802,10 @@ def get_graph(request, experiment_id):
 
     logger.debug("dset_p_info=%s" % dset_p_info)
     logger.debug("dsets=%s" % len(dsets))
-
+    errors = {}
     # TODO: check order of loops so that longests loops are not repeated
     for graph_exp_pset in experiment.getParameterSets().filter(schema=exp_schema):
+        errors = ''
         logger.debug("graph_exp_pset=%s" % graph_exp_pset)
         try:
             exp_params = ExperimentParameter.objects.filter(
@@ -813,9 +818,11 @@ def get_graph(request, experiment_id):
                 graphit._get_graph_data(exp_params)
         except ValueError, e:
             logger.error(e)
+            display_html.append(render_error(e))
             continue
         except ExperimentParameter.DoesNotExist, e:
             logger.error(e)
+            display_html.append(render_error(e))
             continue
 
         logger.debug("dsets=%s" % len(dsets))
@@ -919,6 +926,7 @@ def get_graph(request, experiment_id):
                         try:
                             graph_vals = graphit._match_key_vals(graph_vals, dset_params, value_keys[m], exp_name, functions)
                         except ValueError, e:
+                            errors = str(e)
                             logger.error(e)
                             continue
                         #logger.debug("graph_vals=%s" % graph_vals)
@@ -929,6 +937,7 @@ def get_graph(request, experiment_id):
                     graph_vals.update(graphit._match_constants(value_keys[m], value_dict,  functions))
                 except ValueError, e:
                     logger.error(e)
+                    errors = str(e)
                     continue
 
             graph_val_dict[m] = graph_vals
@@ -940,6 +949,7 @@ def get_graph(request, experiment_id):
                 plot = graphit.reorder_keys(graph_val_dict[k], graph_info, value_keys[k], exp_name)
             except ValueError, e:
                 logger.error(e)
+                errors = str(e)
                 continue
             logger.debug("plot=%s" % plot)
             plots.append(plot)
@@ -949,7 +959,14 @@ def get_graph(request, experiment_id):
         #pfile = mtp.graph(graph_info, exp_schema, graph_exp_pset, PLOT_NAME, plots)
 
         g = Flot()
-        pfile = g.graph(graph_info, exp_schema, graph_exp_pset, PLOT_NAME, plots)
+        try:
+            pfile = g.graph(graph_info, exp_schema, graph_exp_pset, PLOT_NAME, plots)
+        except Exception, e:
+            logger.error(e)
+            errors = "Cannot render graph"
+
+        if not pfile:
+            errors = "Cannot render graph"
 
         logger.debug("pfile=%s" % pfile)
         if pfile:
@@ -991,7 +1008,9 @@ def get_graph(request, experiment_id):
             except MultipleObjectsReturned:
                 logger.error("multiple hrmc experiment schemas returned")
                 return None
-            ep.numerical_value = len(dsets)
+            #ep.numerical_value = len(dsets)
+            ep.numerical_value = 0
+
             ep.save()
 
             try:
@@ -1008,14 +1027,25 @@ def get_graph(request, experiment_id):
             ep.string_value = pfile
             ep.save()
 
-            res = ''
-            with open(pfile, 'r') as f:
-                res += f.read()
-            display_html.append(res)
+            if errors:
+                display_html.append(render_error(errors))
+            else:
+                res = ''
+                with open(pfile, 'r') as f:
+                    res += f.read()
+                display_html.append(res)
 
     c['display_html'] = display_html
     return HttpResponse(render_response_index(request, "hrmc_views/graph_view.html", c))
 
+
+def render_error(msg):
+    context = {'error': msg}
+    template = get_template("hrmc_views/error.html")
+    c = Context(context)
+    content = template.render(c)
+    logger.debug("content=%s" % content)
+    return content
 
 def test(request):
     c = Context({})

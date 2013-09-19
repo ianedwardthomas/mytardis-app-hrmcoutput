@@ -14,6 +14,14 @@ class Flot(GraphBackend):
 
         logger.debug("flot")
         data = []
+        if 'type' in graph_info:
+            graph_type = graph_info['type']
+        else:
+            graph_type = "scatter"
+        if 'title' in graph_info:
+            title = graph_info['title']
+        else:
+            title = ""
         for i, plot in enumerate(plots):
             logger.debug("plot=%s" % plot)
             vals = []
@@ -37,6 +45,7 @@ class Flot(GraphBackend):
                 l = ""
             logger.debug("legend=%s" % l)
 
+
             if vals:
                 res = []
                 res.append(str(l))
@@ -47,7 +56,9 @@ class Flot(GraphBackend):
 
         context = {
         'id': parameter_set.id,
-        'plots': data}
+        'graph_type': graph_type,
+        'plots': data,
+        'title': title}
 
         logger.debug("graph_info=%s" % graph_info)
         if 'axes' in graph_info:
