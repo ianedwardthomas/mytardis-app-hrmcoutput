@@ -2,12 +2,28 @@
 {% load url from future %}
 {% load static from staticfiles %}
 
+
 {% block script %}
 {{ block.super }}
 <script type="text/javascript" src="{% static 'js/jquery.flot.js' %}"></script>
 <script type="text/javascript" src="{% static 'js/jquery.flot.selection.js' %}"></script>
 <script type="text/javascript" src="{% static 'js/jquery.flot.resize.js' %}"></script>
 {% endblock script %}
+
+{% block style %}
+{{ block.super }}
+<style type="text/css">
+.display_images {
+    margin: 0 auto
+}
+.display_images div.row-fluid {
+    margin-bottom: 10px;
+}
+.display_images h4 {
+    text-align: center;
+}
+</style>
+{% endblock style %}
 
 {% block experiment_content_preview %}
 <div id="graphs">
@@ -18,10 +34,10 @@
   </div>
 </div>
 </div>
-{% endblock %}
+{% endblock experiment_content_preview %}
 
 {% block documentready %}
-$('#graphs').load('{% url 'tardis.apps.hrmc_views.views.get_graph' experiment.id %}');
+$('#graphs').load('{% url 'tardis.apps.hrmc_views.views.get_exp_graph' experiment.id %}');
 {% endblock documentready %}
 
 {% block finalscript %}

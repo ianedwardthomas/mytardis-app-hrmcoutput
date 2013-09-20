@@ -73,7 +73,6 @@ class Flot(GraphBackend):
 
         logger.debug("context=%s" % context)
 
-        #template = Template(tcontent)
         template = get_template("hrmc_views/flot.html")
         c = Context(context)
         content = template.render(c)

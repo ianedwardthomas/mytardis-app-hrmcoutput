@@ -42,7 +42,9 @@ from tardis.tardis_portal.shortcuts import get_experiment_referer
 from tardis.tardis_portal.shortcuts import render_response_index
 from tardis.tardis_portal.models import Schema, DatasetParameterSet
 from tardis.tardis_portal.models import ExperimentParameterSet
-from tardis.tardis_portal.models import ParameterName, DatasetParameter
+from tardis.tardis_portal.models import ( ParameterName,
+    DatasetParameter, DatafileParameter)
+
 from tardis.tardis_portal.models import ExperimentParameter
 from tardis.tardis_portal.models import Dataset_File
 from tardis.tardis_portal.views import SearchQueryString
@@ -239,25 +241,25 @@ def view_full_dataset(request, dataset_id):
     # - allow creation of new files up until experiment is public, then set
     #   just last version.
 
-    # plot psd.dat and PSD_exp.dat versus r
-    image_to_show = get_dataset_image_to_show(dataset,
-        sch, dps, hrmc_plot_name="plot1",
-        filename1="psd.dat", filename2="PSD_exp.dat",
-        file_label1="psd", file_label2="PSD_exp",
-        x_label="r (Angstroms)",
-        y_label="g(r)")
-    if image_to_show:
-        display_images.append(image_to_show)
+    # # plot psd.dat and PSD_exp.dat versus r
+    # image_to_show = get_dataset_image_to_show(dataset,
+    #     sch, dps, hrmc_plot_name="plot1",
+    #     filename1="psd.dat", filename2="PSD_exp.dat",
+    #     file_label1="psd", file_label2="PSD_exp",
+    #     x_label="r (Angstroms)",
+    #     y_label="g(r)")
+    # if image_to_show:
+    #     display_images.append(image_to_show)
 
-    # plot data_grfinal.dat and input_gr.dat versus r
-    image_to_show = get_dataset_image_to_show(dataset,
-        sch, dps, hrmc_plot_name="plot2",
-        filename1="data_grfinal.dat", filename2="input_gr.dat",
-        file_label1="data_grfinal", file_label2="input_gr",
-        x_label="r (Angstroms)",
-        y_label="g(r)")
-    if image_to_show:
-        display_images.append(image_to_show)
+    # # plot data_grfinal.dat and input_gr.dat versus r
+    # image_to_show = get_dataset_image_to_show(dataset,
+    #     sch, dps, hrmc_plot_name="plot2",
+    #     filename1="data_grfinal.dat", filename2="input_gr.dat",
+    #     file_label1="data_grfinal", file_label2="input_gr",
+    #     x_label="r (Angstroms)",
+    #     y_label="g(r)")
+    # if image_to_show:
+    #     display_images.append(image_to_show)
 
     upload_method = getattr(settings, "UPLOAD_METHOD", "uploadify")
 
@@ -748,7 +750,7 @@ CHECKSUM_NAME = "checksum"
 PLOT_NAME = "plot"
 
 
-def get_graph(request, experiment_id):
+def get_exp_graph(request, experiment_id):
     display_html = []
 
     # TODO: should be read from domain-specific filter plugins
@@ -955,18 +957,32 @@ def get_graph(request, experiment_id):
             plots.append(plot)
 
         logger.debug(("plots=%s" % plots))
-        #mtp = MatPlotLib()
-        #pfile = mtp.graph(graph_info, exp_schema, graph_exp_pset, PLOT_NAME, plots)
 
-        g = Flot()
+        def detected3d(plots):
+            threed = False
+            for plot in plots:
+                logger.debug("plot=%s" % plot)
+                for coord in plot[1:]:
+                    if len(coord[1]) > 2:
+                        threed = True
+                        break
+            return threed
+
+        if detected3d(plots):
+            logger.debug("3d")
+            g = MatPlotLib()
+        else:
+            g = Flot()
+
+        pfile = None
         try:
             pfile = g.graph(graph_info, exp_schema, graph_exp_pset, PLOT_NAME, plots)
         except Exception, e:
             logger.error(e)
             errors = "Cannot render graph"
-
-        if not pfile:
-            errors = "Cannot render graph"
+        else:
+            if not pfile:
+                errors = "Cannot render graph"
 
         logger.debug("pfile=%s" % pfile)
         if pfile:
@@ -1008,8 +1024,8 @@ def get_graph(request, experiment_id):
             except MultipleObjectsReturned:
                 logger.error("multiple hrmc experiment schemas returned")
                 return None
-            #ep.numerical_value = len(dsets)
-            ep.numerical_value = 0
+            ep.numerical_value = len(dsets)
+            #ep.numerical_value = 0
 
             ep.save()
 
@@ -1046,6 +1062,248 @@ def render_error(msg):
     content = template.render(c)
     logger.debug("content=%s" % content)
     return content
+
+
+
+def get_dset_graph(request, dset_id):
+    display_html = []
+
+    # TODO: should be read from domain-specific filter plugins
+    functions = {
+        'tardis.tardis_portal.filters.getdf': [1, 3, 5 , 7], #only works for lists
+        'tardis.tardis_portal.filters.x': [2, 4 , 6, 8],
+        'tardis.tardis_portal.filters.y': [11, 14, 15, 35],
+    }
+
+    c = Context({})
+    try:
+        dataset = Dataset.objects.get(id=dset_id)
+    except PermissionDenied:
+        return return_response_error(request)
+    except Dataset.DoesNotExist:
+        return return_response_not_found(request)
+
+    (exp_schema, dset_schema, dfile_schema) = graphit.load_graph_schemas()
+
+    dfiles = list(Dataset_File.objects.filter(dataset=dataset))
+    logger.debug("len(dfiles)=%s" % len(dfiles))
+
+    errors = ""
+    # TODO: check order of loops so that longests loops are not repeated
+    for graph_dset_pset in dataset.getParameterSets().filter(schema=dset_schema):
+        logger.debug("graph_dset_pset=%s" % graph_dset_pset)
+        try:
+            dset_params = DatasetParameter.objects.filter(
+                parameterset=graph_dset_pset)
+        except DatasetParameter.DoesNotExist:
+            continue
+
+        try:
+            (dset_name, value_keys, value_dict, graph_info, checksum) = \
+                graphit._get_graph_data(dset_params)
+        except ValueError, e:
+            logger.error(e)
+            continue
+
+        if not value_keys:
+            continue
+
+        if len(dfiles) == checksum:
+            logger.debug("already computed")
+            try:
+                checksum_pn = ParameterName.objects.get(schema=dset_schema, name=CHECKSUM_NAME)
+            except ParameterName.DoesNotExist:
+                logger.error(
+                    "ParameterName is missing %s parameter" % PLOT_NAME)
+                continue
+            except MultipleObjectsReturned:
+                logger.error(
+                    "ParameterName is multiple %s parameters" % PLOT_NAME)
+                continue
+
+            try:
+                ep = DatasetParameter.objects.get(
+                    parameterset=graph_dset_pset,
+                    name=checksum_pn)
+            except DatasetParameter.DoesNotExist:
+                logger.warn("cannot load dataset paramter for checksum")
+                # if cannot load parameter, then recalculate anyway
+                pass
+            except MultipleObjectsReturned:
+                logger.error("multiple hrmc dset schemas returned")
+                continue
+            else:
+                try:
+                    pn = ParameterName.objects.get(schema=dset_schema, name=PLOT_NAME)
+                except ParameterName.DoesNotExist:
+                    logger.error(
+                        "ParameterName is missing %s parameter" % PLOT_NAME)
+                    continue
+                except MultipleObjectsReturned:
+                    logger.error(
+                        "ParameterName is multiple %s parameters" % PLOT_NAME)
+                    continue
+                logger.debug("pn=%s" % pn)
+                logger.debug("dset_name=%s" % dset_name)
+                logger.debug("graph_dset_pset=%s" % graph_dset_pset)
+                try:
+                    dp = DatasetParameter.objects.get(
+                        parameterset=graph_dset_pset,
+                        name=pn)
+                except DatasetParameter.DoesNotExist:
+                    # if cannot load param, then continue anyway
+                    logger.warn("cannot load dataset parameter")
+                    pass
+                except MultipleObjectsReturned:
+                    logger.error("multiple hrmc dset schemas returned")
+                    continue
+                else:
+                    res = ''
+                    with open(dp.string_value, 'r') as f:
+                        res += f.read()
+                    display_html.append(res)
+                    continue
+        else:
+            logger.debug("new plot generated")
+            # TODO: clean up old cached version of the file
+
+        plots = []
+        for m, key in enumerate(value_keys):
+            logger.debug("key=%s" % key)
+            graph_vals = defaultdict(list)
+
+            for dfile in Dataset_File.objects.filter(dataset=dataset):
+                logger.debug("dfile=%s" % dfile)
+                dset_pset = dfile.getParameterSets() \
+                    .filter(schema=dfile_schema)
+
+                for graph_dfile_pset in dset_pset:
+                    logger.debug("graph_dfile_pset=%s" % graph_dfile_pset)
+                    try:
+                        dfile_params = DatafileParameter.objects.filter(
+                            parameterset=graph_dfile_pset)
+                    except DatafileParameter.DoesNotExist, e:
+                        logger.error(e)
+                        errors = str(e)
+                        continue
+
+                    logger.debug("dset_name=%s" % dset_name)
+
+                    logger.debug("1graph_vals=%s" % graph_vals)
+                    try:
+                        graph_vals = graphit._match_key_vals(graph_vals, dfile_params, key, dset_name, functions)
+                    except ValueError, e:
+                        logger.error(e)
+                        errors = str(e)
+                        continue
+                    logger.debug("2graph_vals=%s" % graph_vals)
+
+                logger.debug("3graph_vals=%s" % graph_vals)
+
+            try:
+                graph_vals.update(graphit._match_constants(key, value_dict, functions))
+            except ValueError, e:
+                logger.error(e)
+                errors = str(e)
+                continue
+
+            logger.debug("4graph_vals=%s" % graph_vals)
+
+            try:
+                plot = graphit.reorder_keys(graph_vals, graph_info, key, dset_name)
+            except ValueError, e:
+                logger.error(e)
+                continue
+            logger.debug("plot=%s" % plot)
+
+            plots.append(plot)
+
+        g = Flot()
+        pfile = None
+        try:
+            pfile = g.graph(graph_info, dset_schema, graph_dset_pset, PLOT_NAME, plots)
+        except Exception, e:
+            logger.error(e)
+            errors = "Cannot render graph"
+        else:
+            if not pfile:
+                errors = "Cannot render graph"
+
+        # logger.debug(("plots=%s" % plots))
+        # mtp = MatPlotLib()
+        # pfile = mtp.graph(graph_info, dset_schema, graph_dset_pset, PLOT_NAME, plots)
+
+        if pfile:
+
+            try:
+                checksum_pn = ParameterName.objects.get(schema=dset_schema, name=CHECKSUM_NAME)
+            except ParameterName.DoesNotExist:
+                logger.error(
+                    "ParameterName is missing %s parameter" % PLOT_NAME)
+                return None
+            except MultipleObjectsReturned:
+                logger.error(
+                    "ParameterName is multiple %s parameters" % PLOT_NAME)
+                return None
+
+            try:
+                dp = DatasetParameter.objects.get(
+                    parameterset=graph_dset_pset,
+                    name=checksum_pn)
+            except DatasetParameter.DoesNotExist:
+                dp = DatasetParameter(
+                    parameterset=graph_dset_pset,
+                    name=checksum_pn)
+            except MultipleObjectsReturned:
+                logger.error("multiple hrmc dataset schemas returned")
+                return None
+            dp.numerical_value = len(dfiles)
+            #dp.numerical_value = 0
+
+            dp.save()
+
+
+            # TODO: return encode rather than create Parameters as all
+            # backends should do the same thing.
+            try:
+                # FIXME: need to select on parameter set here too
+                pn = ParameterName.objects.get(schema=dset_schema, name=PLOT_NAME)
+            except ParameterName.DoesNotExist:
+                logger.error(
+                    "ParameterName is missing %s parameter" % PLOT_NAME)
+                return None
+            except MultipleObjectsReturned:
+                logger.error(
+                    "ParameterName is multiple %s parameters" % PLOT_NAME)
+                return None
+
+            logger.debug("ready to save")
+
+            try:
+                ep = DatasetParameter.objects.get(
+                    parameterset=graph_dset_pset,
+                    name=pn)
+            except DatasetParameter.DoesNotExist:
+                ep = DatasetParameter(
+                    parameterset=graph_dset_pset,
+                    name=pn)
+            except MultipleObjectsReturned:
+                logger.error("multiple hrmc dset schemas returned")
+                return None
+            ep.string_value = pfile
+            ep.save()
+
+            if errors:
+                display_html.append(render_error(errors))
+            else:
+                res = ''
+                with open(pfile, 'r') as f:
+                    res += f.read()
+                display_html.append(res)
+
+    c['display_html'] = display_html
+    return HttpResponse(render_response_index(request, "hrmc_views/graph_view.html", c))
+
 
 def test(request):
     c = Context({})
