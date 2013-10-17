@@ -23,6 +23,7 @@ import logging
 import base64
 from collections import defaultdict
 import os
+from pprint import pformat
 import tempfile
 import re
 
@@ -57,6 +58,7 @@ from django.template.loader import get_template
 from . import graphit
 from .matplot import MatPlotLib
 from .flot import Flot
+from .d3 import D3
 
 # import and configure matplotlib library
 try:
@@ -962,27 +964,29 @@ def get_exp_graph(request, experiment_id):
             threed = False
             for plot in plots:
                 logger.debug("plot=%s" % plot)
-                for coord in plot[1:]:
-                    if len(coord[1]) > 2:
-                        threed = True
-                        break
+                if len(plot) > 3:
+                    threed = True
+                    break
             return threed
 
         if detected3d(plots):
             logger.debug("3d")
+            #g = D3()
             g = MatPlotLib()
         else:
             g = Flot()
 
-        pfile = None
-        try:
-            pfile = g.graph(graph_info, exp_schema, graph_exp_pset, PLOT_NAME, plots)
-        except Exception, e:
-            logger.error(e)
-            errors = "Cannot render graph"
-        else:
-            if not pfile:
-                errors = "Cannot render graph"
+        # pfile = None
+        # try:
+        # except Exception, e:
+        #     logger.error(e)
+        #     errors = "Cannot render graph"
+        # else:
+        #     if not pfile:
+        #         errors = "Cannot render graph
+
+        pfile = g.graph(graph_info, exp_schema, graph_exp_pset, PLOT_NAME, plots)
+
 
         logger.debug("pfile=%s" % pfile)
         if pfile:

@@ -49,6 +49,7 @@ try:
     from matplotlib.pyplot import legend
     is_matplotlib_imported = True
     from mpl_toolkits.mplot3d import Axes3D
+    from matplotlib import cm
 except ImportError:
     is_matplotlib_imported = False
 
@@ -88,12 +89,12 @@ class MatPlotLib(GraphBackend):
                 logger.debug("coord=%s" % str(coord))
                 vals.append(coord[1])
 
-            logger.debug("vals=%s" % vals)
+            #logger.debug("vals=%s" % vals)
 
             if not ax:
                 if len(vals) == 3:
                     ax = Axes3D(fig)
-                    #ax = fig.gca(projection='3d')
+                    #ax = fig.add_subplot(111, projection="3d")
                 else:
                     ax = fig.add_subplot(111, frame_on=False)
 
@@ -118,8 +119,13 @@ class MatPlotLib(GraphBackend):
                             markeredgecolor=point_col, marker=markiter.next(),
                             label=l)
                     else:
-                        ax.scatter(*vals, color=point_col,
+                        if len(vals) == 3:
+                            ax.scatter(*vals, color=point_col,
                             marker=markiter.next(), label=l)
+                            #ax.plot_wireframe(*vals, rstride=2, cstride=2)
+                        else:
+                            ax.scatter(*vals, color=point_col,
+                                marker=markiter.next(), label=l)
 
                 except ValueError, e:
                     # TODO: handle errors properly

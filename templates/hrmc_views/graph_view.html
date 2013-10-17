@@ -1,20 +1,11 @@
 {% load static from staticfiles %}
 
 <div class="row-fluid" style="margin-bottom: 20px;">
-  <h3></h3>
   <div class="info-box">
     {% if display_html|length > 0 %}
-    <div class="display_html">
      {% for g in display_html %}
     {{ g|safe }}
-    {% cycle "<div class='row-fluid'>" "" %}
-      {% if forloop.last %}
-        </div>
-      {% else %}
-        {% cycle "" "</div>" %}
-      {% endif %}
         {% endfor %}
-    </div>
     {% else %}
       <div class="alert">No previews available</div>
     {% endif %}

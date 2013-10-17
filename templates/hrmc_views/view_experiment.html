@@ -8,8 +8,13 @@
 <script type="text/javascript" src="{% static 'js/jquery.flot.js' %}"></script>
 <script type="text/javascript" src="{% static 'js/jquery.flot.selection.js' %}"></script>
 <script type="text/javascript" src="{% static 'js/jquery.flot.resize.js' %}"></script>
-{% endblock script %}
 
+<script type="text/javascript" src="{% static 'js/d3.v3.min.js' %}"></script>
+<script type="text/javascript" src="{% static 'js/x3dom-full.js' %}"></script>
+<link type="text/css" href="{% static 'css/x3dom.css' %}" rel="stylesheet"/>
+
+
+{% endblock script %}
 {% block style %}
 {{ block.super }}
 <style type="text/css">
@@ -26,6 +31,7 @@
 {% endblock style %}
 
 {% block experiment_content_preview %}
+
 <div id="graphs">
   <div class="row-fluid" style="margin-bottom: 20px;">
     <div class="info-box">
@@ -33,13 +39,18 @@
       "loading" /></p>
   </div>
 </div>
+
+
+
 </div>
+
 {% endblock experiment_content_preview %}
 
 {% block documentready %}
 $('#graphs').load('{% url 'tardis.apps.hrmc_views.views.get_exp_graph' experiment.id %}');
+
 {% endblock documentready %}
 
 {% block finalscript %}
-{{ block.super }}
+
 {% endblock finalscript %}
