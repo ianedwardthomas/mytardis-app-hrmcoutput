@@ -79,9 +79,7 @@ Checkout the MyTardis contextual views app as mytardis user:
     git checkout hrmc2
     exit
 
-Edit line 239 of /opt/mytardis/current/tardis/tardis_portal/views.py. Replace
-``parameter = DatafileParameter.objects.get(pk=parameter_id)`` by
-``parameter = DatasetParameter.objects.get(pk=parameter_id)``
+
 
 For centos 6 install the matplotlib library::
 
@@ -98,6 +96,16 @@ In ``/opt/mytardis/current/tardis/settings.py`` add following::
             "tardis.apps.hrmc_views.graphit.view_experiment")]
     DATASET_VIEWS = [("http://rmit.edu.au/schemas/dsetgraph",
             "tardis.apps.hrmc_views.graphit.view_dataset")]
+
+Execute the following commands
+
+    sudo -s mytardis
+    cd /opt/mytardis/current
+    cp /opt/mytardis/current/tardis/apps/hrmc_views/mytardis/view_dataset.html /opt/mytardis/current/tardis/tardis_portal/templates/tardis_portal/view_dataset.html
+
+    cp /opt/mytardis/current/tardis/apps/hrmc_views/mytardis/view_experiment.html /opt/mytardis/current/tardis/tardis_portal/templates/tardis_portal/view_experiment.html
+    bin/django loaddata tardis_portal /opt/mytardis/current/tardis/apps/hrmc_views/initial.json
+    bin/django collectstatic -l --noinput
 
 Restart MyTardis
 
