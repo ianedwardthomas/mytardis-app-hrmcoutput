@@ -1,12 +1,12 @@
 {% extends "tardis_portal/portal_template.html" %}
 {% load basiccomparisonfilters %}
 {% load capture %}
-{% load url from future %}
 {% load static from staticfiles %}
 {% load experiment_tags %}
 {% load uploadify_tags %}
 {% load dynurl %}
 {% load mustachejs %}
+{% load bleach_tag %}
 
 {% block script %}
 
@@ -244,20 +244,12 @@ $('#modal-metadata .submit-button').click(function() {
     <span property="dc:title">{{ experiment.title }}</span>
     <br/>
     <small>
-    {% for author in experiment.author_experiment_set.all %}
-      {% capture as creator_span %}
-        <span property="dc:creator"
-              style="white-space: nowrap;">{{ author.author }}</span>
-      {% endcapture %}
-      {% if not forloop.first %}
-      ,
+    {% for author in experiment.author_experiment_set.all %}{% capture as creator_span %}
+    <span property="dc:creator" style="white-space: nowrap;">
+      {{ author.author }}</span>{% endcapture %}{% if not forloop.first %},
       {% endif %}
-      {% if author.url %}
-        <a href="{{ author.url }}">{{ creator_span }}</a>
-      {% else %}
-        {{ creator_span }}
-      {% endif %}
-    {% endfor %}
+      {% if author.url %}<a href="{{ author.url }}">{{ creator_span }}</a>{% else %}
+      {{ creator_span }}{% endif %}{% endfor %}
     </small>
   </h1>
   <p style="text-align: right">
@@ -272,30 +264,23 @@ $('#modal-metadata .submit-button').click(function() {
 <div class="row-fluid" >
   <div class="span7">
   <div align="center" style="margin-bottom: -20px">
-  <div id="abstractHolder" style="display: none">{{ experiment.description|safe|linebreaksbr }}</div>
+  <div id="abstractHolder" style="display: none">{{ experiment.description|bleach|linebreaksbr }}</div>
   <a id="abstract-toggle" class="btn btn-mini" title="Show Description">
      Toggle Full Description
   </a>
   </div>
+  <div style="padding-top:10px;">
   <p class="abstract well info-box" property="dc:abstract">
       <span id="abstractText">
       </span>
   </p>
-
-    {% block experiment_content_preview %}
-
-    {% endblock experiment_content_preview %}
-
-
+  </div>
+{% block experiment_content_preview %}
+ {% endblock experiment_content_preview %}
     <!-- Tab buttons -->
     <ul id="experiment-tabs" class="nav nav-pills">
-      <li><a data-toggle="tab" title="Description" href="{% url 'tardis.tardis_portal.views.experiment_description' experiment.id %}">Description</a></li>
-      <li><a data-toggle="tab" title="Metadata" href="{% url 'tardis.tardis_portal.views.retrieve_experiment_metadata' experiment.id %}">Metadata</a></li>
-        <li><a data-toggle="tab" title="Sharing" href="{% url 'tardis.tardis_portal.views.share' experiment.id %}">Sharing</a></li>
-        <li><a data-toggle="tab" title="Transfer Datasets" href="{% url 'tardis.tardis_portal.views.experiment_dataset_transfer' experiment.id %}">Transfer Datasets</a></li>
-      <!-- {{ apps }} -->
       {% for appurl, appname in apps %}
-        <li><a data-toggle="tab" href="{% dynurl appurl experiment.id %}">{{ appname }}</a></li>
+      <li><a data-toggle="tab" title="{{appname}}" href="{{ appurl }}">{{ appname }}</a></li>
       {% endfor %}
     </ul>
     <div class="tab-content">
@@ -404,31 +389,26 @@ $(document).ready(function() {
   // Abbreviate abstract
   var hideAbstract = false;
   var spanhtml = $('#abstractHolder').html();
-  var spantext = $('#abstractHolder').text();
 
     if(spanhtml.length > 100)
     {
 	hideAbstract = true;
-        $('#abstractText').parent().attr('style', 'padding-top: 25px;');
         $('#abstract-toggle').attr('style', 'display: inline;');
 
-        span = $('#abstractText').addClass('truncated-text');
-
-        $('#abstractText').empty().html(spantext);
+        $('#abstractText').empty().html(spanhtml);
+        $('#abstractText').parent().attr('style', 'height: 33px;');
         $('#abstractText').parent().addClass('abstract-clickable');
 
         $('#abstract-toggle').click(function(evt) {
            if(!hideAbstract)
            {
-             span.addClass('truncated-text');
-             $('#abstractText').empty().html(spantext);
+             $('#abstractText').parent().attr('style', 'height: 33px;');
              hideAbstract = true;
 	     $('#abstract-toggle').text('Show Description');
            }
            else
            {
-             span.removeClass('truncated-text');
-             $('#abstractText').empty().html(spanhtml);
+             $('#abstractText').parent().attr('style', 'padding-top:20px;');
              hideAbstract = false;
              $('#abstract-toggle').text('Hide Description');
            }
@@ -440,27 +420,38 @@ $(document).ready(function() {
     }
 
 });
+{% block documentready %}
+{% endblock documentready %}
 
 </script>
 
 <script type="text/javascript">
+$(function(){
+var oldSync = Backbone.sync;
+Backbone.sync = function(method, model, options){
+  options.beforeSend = function(xhr){
+    xhr.setRequestHeader('X-CSRFToken', '{{csrf_token}}');
+  };
+  return oldSync(method, model, options);
+};
+});
 var datasetTiles = (function() {
 
-  var datasets = new MyTardis.Datasets();
-  datasets.experimentId = {{ experiment.id }};
-  datasets.url = "{% url 'tardis.tardis_portal.views.experiment_datasets_json' experiment.id %}";
+    var datasets = new MyTardis.Datasets();
 
-  var datasetTiles = new MyTardis.DatasetTiles({
-    'id': "datasets",
-    'collection': datasets,
-    'el': $('#datasets').get(0)
-  });
+    datasets.experimentId = {{ experiment.id }};
+    datasets.url = "{% url 'tardis.tardis_portal.views.experiment_datasets_json' experiment.id %}";
 
-  datasets.fetch({});
+    var datasetTiles = new MyTardis.DatasetTiles({
+	'id': "datasets",
+	'collection': datasets,
+	'el': $('#datasets').get(0)
+    });
 
-  return datasetTiles;
+    datasets.fetch({});
+
+    return datasetTiles;
 })();
 </script>
-
 
 {% endblock %}
