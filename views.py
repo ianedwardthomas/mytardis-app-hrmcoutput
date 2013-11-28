@@ -58,7 +58,7 @@ from django.template.loader import get_template
 from . import graphit
 from .matplot import MatPlotLib
 from .flot import Flot
-from .d3 import D3
+#from .d3 import D3
 
 # import and configure matplotlib library
 try:
