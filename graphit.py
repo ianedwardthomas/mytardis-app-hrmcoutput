@@ -29,6 +29,9 @@ from tardis.tardis_portal.models import ExperimentParameter
 # FIXME: can Parameter be exported via models __init__ ?
 from django.core.exceptions import ObjectDoesNotExist
 from tardis.tardis_portal.models import Dataset_File
+
+from django.core.urlresolvers import reverse
+
 from tardis.tardis_portal.views import SearchQueryString
 from tardis.tardis_portal.views import _add_protocols_and_organizations
 
@@ -46,6 +49,95 @@ logger = logging.getLogger(__name__)
 
 @authz.experiment_access_required
 def view_experiment(request, experiment_id,
+                    template_name='hrmc_views/view_experiment.html'):
+
+    """View an existing experiment.
+
+    :param request: a HTTP Request instance
+    :type request: :class:`django.http.HttpRequest`
+    :param experiment_id: the ID of the experiment to be edited
+    :type experiment_id: string
+    :rtype: :class:`django.http.HttpResponse`
+
+    """
+    c = Context({})
+
+    try:
+        experiment = Experiment.safe.get(request.user, experiment_id)
+    except PermissionDenied:
+        return return_response_error(request)
+    except Experiment.DoesNotExist:
+        return return_response_not_found(request)
+
+
+    c['experiment'] = experiment
+    c['has_write_permissions'] = \
+        authz.has_write_permissions(request, experiment_id)
+    c['has_download_permissions'] = \
+        authz.has_experiment_download_access(request, experiment_id)
+    if request.user.is_authenticated():
+        c['is_owner'] = authz.has_experiment_ownership(request, experiment_id)
+    c['subtitle'] = experiment.title
+    c['nav'] = [{'name': 'Data', 'link': '/experiment/view/'},
+                {'name': experiment.title,
+                 'link': experiment.get_absolute_url()}]
+
+    if 'status' in request.POST:
+        c['status'] = request.POST['status']
+    if 'error' in request.POST:
+        c['error'] = request.POST['error']
+    if 'query' in request.GET:
+        c['search_query'] = SearchQueryString(request.GET['query'])
+    if 'search' in request.GET:
+        c['search'] = request.GET['search']
+    if 'load' in request.GET:
+        c['load'] = request.GET['load']
+
+    _add_protocols_and_organizations(request, experiment, c)
+
+    default_apps = [
+        {'name': 'Description',
+         'viewfn': 'tardis.tardis_portal.views.experiment_description'},
+        {'name': 'Metadata',
+         'viewfn': 'tardis.tardis_portal.views.retrieve_experiment_metadata'},
+        {'name': 'Sharing', 'viewfn': 'tardis.tardis_portal.views.share'},
+        {'name': 'Transfer Datasets',
+         'viewfn': 'tardis.tardis_portal.views.experiment_dataset_transfer'},
+    ]
+    appnames = []
+    appurls = []
+
+    for app in getattr(settings, 'EXPERIMENT_APPS', default_apps):
+        try:
+            appnames.append(app['name'])
+            if 'viewfn' in app:
+                appurls.append(reverse(app['viewfn'], args=[experiment_id]))
+            elif 'url' in app:
+                appurls.append(app['url'])
+        except:
+            logger.debug('error when loading default exp apps')
+
+    import sys
+    for app in getTardisApps():
+        try:
+            appnames.append(
+                sys.modules['%s.%s.settings'
+                            % (settings.TARDIS_APP_ROOT, app)].NAME)
+            appurls.append(
+                reverse('%s.%s.views.index' % (settings.TARDIS_APP_ROOT,
+                                               app), args=[experiment_id]))
+        except:
+            logger.debug("No tab for %s" % app)
+
+    c['apps'] = zip(appurls, appnames)
+    return HttpResponse(render_response_index(request, template_name, c))
+
+
+
+
+
+@authz.experiment_access_required
+def view_experiment_old(request, experiment_id,
                     template_name='hrmc_views/view_experiment.html'):
 
     """View an existing experiment.
@@ -404,8 +496,67 @@ def load_graph_schemas():
 
     return (exp_schema, dset_schema, dfile_schema)
 
+
+
 @authz.dataset_access_required
 def view_dataset(request, dataset_id):
+    """Displays a Dataset and associated information.
+
+    Shows a dataset its metadata and a list of associated files with
+    the option to show metadata of each file and ways to download those files.
+    With write permission this page also allows uploading and metadata
+    editing.
+    Optionally, if set up in settings.py, datasets of a certain type can
+    override the default view.
+    Settings example:
+    DATASET_VIEWS = [("http://dataset.example/schema",
+                      "tardis.apps.custom_views_app.views.my_view_dataset"),]
+    """
+    dataset = Dataset.objects.get(id=dataset_id)
+
+    def get_datafiles_page():
+        # pagination was removed by someone in the interface but not here.
+        # need to fix.
+        pgresults = 100
+
+        paginator = Paginator(dataset.dataset_file_set.all(), pgresults)
+
+        try:
+            page = int(request.GET.get('page', '1'))
+        except ValueError:
+            page = 1
+
+        # If page request (9999) is out of range, deliver last page of results.
+
+        try:
+            return paginator.page(page)
+        except (EmptyPage, InvalidPage):
+            return paginator.page(paginator.num_pages)
+
+    upload_method = getattr(settings, "UPLOAD_METHOD", False)
+
+    c = Context({
+        'dataset': dataset,
+        'datafiles': get_datafiles_page(),
+        'parametersets': dataset.getParameterSets()
+                                .exclude(schema__hidden=True),
+        'has_download_permissions':
+            authz.has_dataset_download_access(request, dataset_id),
+        'has_write_permissions':
+            authz.has_dataset_write(request, dataset_id),
+        'from_experiment':
+            get_experiment_referer(request, dataset_id),
+        'other_experiments':
+            authz.get_accessible_experiments_for_dataset(request, dataset_id),
+        'upload_method': upload_method
+    })
+    _add_protocols_and_organizations(request, dataset, c)
+    return HttpResponse(render_response_index(
+        request, 'hrmc_views/view_dataset.html', c))
+
+
+@authz.dataset_access_required
+def view_dataset_old(request, dataset_id):
     """Displays a Dataset and associated information.
 
     Shows a dataset its metadata and a list of associated files with

@@ -48,9 +48,5 @@
 
 {% block documentready %}
 $('#graphs').load('{% url 'tardis.apps.hrmc_views.views.get_exp_graph' experiment.id %}');
-
 {% endblock documentready %}
 
-{% block finalscript %}
-
-{% endblock finalscript %}
