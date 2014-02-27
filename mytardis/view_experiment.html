@@ -6,7 +6,6 @@
 {% load uploadify_tags %}
 {% load dynurl %}
 {% load mustachejs %}
-{% load bleach_tag %}
 
 {% block script %}
 
@@ -264,7 +263,7 @@ $('#modal-metadata .submit-button').click(function() {
 <div class="row-fluid" >
   <div class="span7">
   <div align="center" style="margin-bottom: -20px">
-  <div id="abstractHolder" style="display: none">{{ experiment.description|bleach|linebreaksbr }}</div>
+  <div id="abstractHolder" style="display: none">{{ experiment.description|safe|linebreaksbr }}</div>
   <a id="abstract-toggle" class="btn btn-mini" title="Show Description">
      Toggle Full Description
   </a>
