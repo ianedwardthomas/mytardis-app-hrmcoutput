@@ -6,7 +6,7 @@
   "name": "exp_graph",
   "namespace": "http://rmit.edu.au/schemas/expgraph",
   "subtype": "",
-  "hidden": false,
+  "hidden": true,
   "type": 1,
   "immutable": false
  }
@@ -18,7 +18,7 @@
   "name": "dset_graph",
   "namespace": "http://rmit.edu.au/schemas/dsetgraph",
   "subtype": "",
-  "hidden": false,
+  "hidden": true,
   "type": 2,
   "immutable": false
  }
@@ -30,7 +30,7 @@
   "name": "dfile_graph",
   "namespace": "http://rmit.edu.au/schemas/dfilegraph",
   "subtype": "",
-  "hidden": false,
+  "hidden": true,
   "type": 3,
   "immutable": false
  }
