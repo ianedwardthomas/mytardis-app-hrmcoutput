@@ -39,7 +39,7 @@
  "pk": 4,
  "model": "tardis_portal.schema",
  "fields": {
-  "name": "hrmcexp",
+  "name": "HRMC Experiment",
   "namespace": "http://rmit.edu.au/schemas/hrmcexp",
   "subtype": "",
   "hidden": false,
@@ -51,7 +51,7 @@
  "pk": 5,
  "model": "tardis_portal.schema",
  "fields": {
-  "name": "hrmc input",
+  "name": "HRMC Input Dataset",
   "namespace": "http://rmit.edu.au/schemas/hrmcdataset/input",
   "subtype": "",
   "hidden": false,
@@ -63,7 +63,7 @@
  "pk": 6,
  "model": "tardis_portal.schema",
  "fields": {
-  "name": "hrmc output",
+  "name": "HRMC Output Dataset",
   "namespace": "http://rmit.edu.au/schemas/hrmcdataset/output",
   "subtype": "",
   "hidden": false,
@@ -473,6 +473,183 @@
   "order": 40,
   "immutable": false,
   "schema": 9
+ }
+},
+
+{
+ "pk": 24,
+ "model": "tardis_portal.parametername",
+ "fields": {
+  "name": "computation_platform",
+  "data_type": 2,
+  "is_searchable": false,
+  "choices": "",
+  "comparison_type": 1,
+  "full_name": "Computation Platform",
+  "units": "",
+  "order": 1,
+  "immutable": false,
+  "schema": 4
+ }
+},
+{
+ "pk": 25,
+ "model": "tardis_portal.parametername",
+ "fields": {
+  "name": "input_location",
+  "data_type": 2,
+  "is_searchable": false,
+  "choices": "",
+  "comparison_type": 1,
+  "full_name": "Input Location",
+  "units": "",
+  "order": 2,
+  "immutable": false,
+  "schema": 4
+ }
+},
+{
+ "pk": 26,
+ "model": "tardis_portal.parametername",
+ "fields": {
+  "name": "output_location",
+  "data_type": 2,
+  "is_searchable": false,
+  "choices": "",
+  "comparison_type": 1,
+  "full_name": "Output Location",
+  "units": "",
+  "order": 3,
+  "immutable": false,
+  "schema": 4
+ }
+},
+{
+ "pk": 27,
+ "model": "tardis_portal.parametername",
+ "fields": {
+  "name": "iseed",
+  "data_type": 1,
+  "is_searchable": false,
+  "choices": "",
+  "comparison_type": 1,
+  "full_name": "Random Number Seed",
+  "units": "",
+  "order": 4,
+  "immutable": false,
+  "schema": 4
+ }
+},
+{
+ "pk": 28,
+ "model": "tardis_portal.parametername",
+ "fields": {
+  "name": "pottype",
+  "data_type": 1,
+  "is_searchable": false,
+  "choices": "",
+  "comparison_type": 1,
+  "full_name": "Pottype",
+  "units": "",
+  "order": 5,
+  "immutable": false,
+  "schema": 4
+ }
+},
+{
+ "pk": 29,
+ "model": "tardis_portal.parametername",
+ "fields": {
+  "name": "error_threshold",
+  "data_type": 2,
+  "is_searchable": false,
+  "choices": "",
+  "comparison_type": 1,
+  "full_name": "Error Threshold",
+  "units": "",
+  "order": 6,
+  "immutable": false,
+  "schema": 4
+ }
+},
+{
+ "pk": 30,
+ "model": "tardis_portal.parametername",
+ "fields": {
+  "name": "optimisation_scheme",
+  "data_type": 2,
+  "is_searchable": false,
+  "choices": "",
+  "comparison_type": 1,
+  "full_name": "No. Varying parameters",
+  "units": "",
+  "order": 7,
+  "immutable": false,
+  "schema": 4
+ }
+},
+{
+ "pk": 28,
+ "model": "tardis_portal.parametername",
+ "fields": {
+  "name": "fanout_per_kept_result",
+  "data_type": 1,
+  "is_searchable": false,
+  "choices": "",
+  "comparison_type": 1,
+  "full_name": "No. results kept per result",
+  "units": "",
+  "order": 8,
+  "immutable": false,
+  "schema": 4
+ }
+},
+{
+ "pk": 29,
+ "model": "tardis_portal.parametername",
+ "fields": {
+  "name": "threshold",
+  "data_type": 2,
+  "is_searchable": false,
+  "choices": "",
+  "comparison_type": 1,
+  "full_name": "No. results per iteration",
+  "units": "",
+  "order": 9,
+  "immutable": false,
+  "schema": 4
+ }
+},
+{
+ "pk": 30,
+ "model": "tardis_portal.parametername",
+ "fields": {
+  "name": "max_iteration",
+  "data_type": 1,
+  "is_searchable": false,
+  "choices": "",
+  "comparison_type": 1,
+  "full_name": "Maximum no. iterations",
+  "units": "",
+  "order": 10,
+  "immutable": false,
+  "schema": 4
+ }
+},
+{
+ "pk": 36,
+ "model": "tardis_portal.parametername",
+ "fields": {
+  "name": "sweep_map",
+  "data_type": 2,
+  "is_searchable": false,
+  "choices": "",
+  "comparison_type": 1,
+  "full_name": "Values to sweep over",
+  "units": "",
+  "order": 11,
+  "immutable": false,
+  "schema": 4
  }
 }
 ]
